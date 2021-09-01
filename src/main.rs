@@ -1,60 +1,64 @@
 use std::env::args;
-use std::io::prelude::*;
 
+use crate::scanner::Scanner;
+use std::cell::Cell;
+
+mod scanner;
 mod token;
 
 fn main() {
     for a in args() {
         println!("{}", a);
     }
-    if args().count() > 2 {
-        println!("Usage: rlox [script]");
-        std::process::exit(64);
-    } else if args().count() == 2 {
-        let mut args = args();
-        args.next();
-        run_file(args.next().unwrap());
-    } else {
-        run_prompt();
+
+    match args().count() {
+        2 => {
+            let mut args = args();
+            args.next();
+            run_file(args.next().unwrap());
+        }
+        _ => {
+            println!("Usage: rlox [script]");
+            std::process::exit(64);
+        }
     }
 }
 
 fn run_file(f_name: String) {
     let source = std::fs::read_to_string(f_name).unwrap();
-    let mut prog = Lox::new();
+    let prog = Lox::new();
     prog.run(source);
-    if prog.had_error {
+    if prog.had_error.get() {
         std::process::exit(65);
     }
 }
 
-fn run_prompt() {
-    let stdin = std::io::stdin();
-
-    for line in stdin.lock().lines() {
-        Lox::new().run(line.unwrap());
-    }
-}
-
-struct Lox {
-    had_error: bool
+#[derive(Clone)]
+pub struct Lox {
+    had_error: Box<Cell<bool>>,
 }
 
 impl Lox {
     fn new() -> Self {
-        Lox { had_error: false }
+        Lox {
+            had_error: Box::new(Cell::new(false)),
+        }
     }
 
-    fn run(&mut self, source: String) {
-        print!("{}", source);
+    fn run(&self, source: String) {
+        let mut scanner = Scanner::new(source, self.clone());
+        let tokens = scanner.scan_tokens();
+        for token in tokens {
+            println!("{:?}", token);
+        }
     }
 
-    fn error(&mut self, line: usize, message: String) {
+    pub fn error(&mut self, line: usize, message: String) {
         self.report(line, "".to_string(), message);
     }
 
     fn report(&mut self, line: usize, were: String, message: String) {
         eprintln!("[line {}] Error{}: {}", line, were, message);
-        self.had_error = true;
+        *self.had_error.get_mut() = true;
     }
 }

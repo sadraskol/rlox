@@ -1,23 +1,71 @@
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TokenType {
-    LeftParen, RightParen, LeftBrace, RightBrace, Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
 
-    Bang, BangEqual, Equal, EqualEqual, Greater, GreaterEqual, Less, LessEqual,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
 
-    Identifier, String, Number,
+    Identifier,
+    String,
+    Number,
 
-    And, Class, Else, False, Fun, For, If, Nil, Or, Print, Return, Super, This, True, Var, While,
+    And,
+    Class,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
 
-    EOF
+    Eof,
 }
 
-#[derive(Debug)]
-pub struct Object;
+#[derive(Clone, Debug)]
+pub enum Object {
+    String(String),
+    Number(f64),
+}
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     kind: TokenType,
     lexeme: String,
-    literal: Object,
+    literal: Option<Object>,
     line: usize,
+}
+
+impl Token {
+    pub fn new(kind: TokenType, lexeme: String, literal: Option<Object>, line: usize) -> Self {
+        Token {
+            kind,
+            lexeme,
+            literal,
+            line,
+        }
+    }
 }
