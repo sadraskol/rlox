@@ -5,6 +5,7 @@ use std::cell::Cell;
 
 mod scanner;
 mod token;
+mod expr;
 
 fn main() {
     for a in args() {
