@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -49,14 +49,16 @@ pub enum TokenType {
 pub enum Object {
     String(String),
     Number(f64),
+    Bool(bool),
+    Nil,
 }
 
 #[derive(Clone, Debug)]
 pub struct Token {
-    kind: TokenType,
+    pub kind: TokenType,
     pub lexeme: String,
-    literal: Option<Object>,
-    line: usize,
+    pub literal: Option<Object>,
+    pub line: usize,
 }
 
 impl Token {
