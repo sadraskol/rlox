@@ -29,21 +29,21 @@ impl Scanner {
     }
 
     pub fn scan_tokens(&mut self) -> Result<Vec<Token>> {
-        let mut errs = vec![];
+        let mut err = None;
         while !self.is_at_end() {
             self.start = self.current;
-            if let Err(mut err) = self.scan_token() {
-                errs.append(&mut err);
+            if let Err(e) = self.scan_token() {
+                err = Some(e);
             }
         }
 
         self.tokens
             .push(Token::new(TokenType::Eof, "".to_string(), None, self.line));
 
-        if errs.is_empty() {
-            Ok(self.tokens.clone())
+        if let Some(e) = err {
+            Err(e)
         } else {
-            Err(errs)
+            Ok(self.tokens.clone())
         }
     }
 
@@ -112,7 +112,7 @@ impl Scanner {
                 } else if c.is_alphabetic() || c == '_' {
                     self.identifier();
                 } else {
-                    return LoxError::error(self.line, format!("Unexpected character {}", c));
+                    return Err(LoxError::error(self.line, format!("Unexpected character {}", c)));
                 }
             }
         }
@@ -192,7 +192,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            return LoxError::error(self.line, "Unterminated string.".to_string());
+            return Err(LoxError::error(self.line, "Unterminated string.".to_string()));
         }
 
         self.advance();

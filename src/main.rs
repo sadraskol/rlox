@@ -1,11 +1,13 @@
 use std::env::args;
 
+use crate::interpreter::Interpreter;
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::token::Token;
 use crate::token::TokenType;
 
 mod expr;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
@@ -46,11 +48,11 @@ pub struct LoxError {
 }
 
 impl LoxError {
-    pub fn error<Any>(line: usize, message: String) -> Result<Any> {
+    pub fn error(line: usize, message: String) -> Self {
         Self::report(line, "".to_string(), message)
     }
 
-    pub fn error_tok<Any>(token: Box<Token>, message: String) -> Result<Any> {
+    pub fn error_tok(token: Box<Token>, message: String) -> Self {
         if token.kind == TokenType::Eof {
             Self::report(token.line, " at end".to_string(), message)
         } else {
@@ -58,17 +60,17 @@ impl LoxError {
         }
     }
 
-    fn report<Any>(line: usize, location: String, message: String) -> Result<Any> {
+    fn report(line: usize, location: String, message: String) -> Self {
         eprintln!("[line {}] Error{}: {}", line, location, message);
-        Err(vec![LoxError {
+        LoxError {
             line,
             location,
             message,
-        }])
+        }
     }
 }
 
-pub type Result<T> = std::result::Result<T, Vec<LoxError>>;
+pub type Result<T> = std::result::Result<T, LoxError>;
 
 impl Lox {
     fn new() -> Self {
@@ -79,9 +81,13 @@ impl Lox {
         let mut scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens()?;
         let mut parser = Parser::new(tokens);
-        let expr = parser.parse()?;
+        let statements = parser.parse()?;
+        let mut interpreter = Interpreter::default();
 
-        println!("{:?}", expr);
+        for statement in statements {
+            interpreter.interpret_statement(statement)?;
+        }
+
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 use crate::expr::Expr;
+use crate::expr::Stmt;
 use crate::token::Object;
 use crate::token::Token;
 use crate::token::TokenType;
@@ -24,8 +25,62 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Box<Expr>> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
+        self.program()
+    }
+
+    fn program(&mut self) -> Result<Vec<Stmt>> {
+        let mut stmts = vec![];
+        while !self.is_at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        Ok(stmts)
+    }
+
+    fn declaration(&mut self) -> Result<Stmt> {
+        let res = if self.matches(&[TokenType::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
+        if res.is_err() {
+            self.synchronize();
+            panic!("super")
+        } else {
+            res
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt> {
+        let name = self.consume(&TokenType::Identifier, "Expect variable name.".to_string())?;
+        let mut initializer = None;
+        if self.matches(&[TokenType::Equal]) {
+            initializer = Some(self.expression()?);
+        }
+
+        self.consume(&TokenType::Semicolon, "Expect ';' after variable declaration".to_string())?;
+        Ok(Stmt::Var(name, initializer))
+    }
+
+    fn statement(&mut self) -> Result<Stmt> {
+        if self.matches(&[TokenType::Print]) {
+            self.print_statement()
+        } else {
+            self.expr_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after value.".to_string())?;
+        Ok(Stmt::Print(expr))
+    }
+
+    fn expr_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after value.".to_string())?;
+        Ok(Stmt::Expr(expr))
     }
 
     fn expression(&mut self) -> Result<Box<Expr>> {
@@ -100,6 +155,8 @@ impl Parser {
             Ok(Box::new(Expr::Literal(Object::Bool(false))))
         } else if self.matches(&[TokenType::True]) {
             Ok(Box::new(Expr::Literal(Object::Bool(true))))
+        } else if self.matches(&[TokenType::Identifier]) {
+            Ok(Box::new(Expr::Variable(self.previous())))
         } else if self.matches(&[TokenType::Nil]) {
             Ok(Box::new(Expr::Literal(Object::Nil)))
         } else if self.matches(&[TokenType::Number, TokenType::String]) {
@@ -163,7 +220,7 @@ impl Parser {
     }
 
     fn error<Any>(&mut self, token: Box<Token>, message: String) -> Result<Any> {
-        LoxError::error_tok(token, message)
+        Err(LoxError::error_tok(token, message))
     }
 
     fn synchronize(&mut self) {

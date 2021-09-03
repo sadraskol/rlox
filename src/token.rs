@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
     LeftParen,
@@ -45,12 +47,30 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     String(String),
     Number(f64),
     Bool(bool),
     Nil,
+}
+
+impl Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::Number(n) => {
+                let s = format!("{}", n);
+                if let Some(s) = s.strip_suffix(".0") {
+                    write!(f, "{}", s)
+                } else {
+                    write!(f, "{}", s)
+                }
+            },
+            Object::String(s) => write!(f, "{}", s),
+            Object::Bool(b) => write!(f, "{}", b),
+            Object::Nil => write!(f, "nil"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
