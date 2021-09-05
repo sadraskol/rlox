@@ -9,17 +9,41 @@ use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Environment {
+    enclosing: Option<Box<Environment>>,
     values: HashMap<String, Object>,
 }
 
 impl Environment {
+    fn new(enclosing: Environment) -> Self {
+        Environment {
+            enclosing: Some(Box::new(enclosing)),
+            values: HashMap::new(),
+        }
+    }
+
     fn define(&mut self, name: String, value: Object) {
         self.values.insert(name, value);
     }
 
+    fn assign(&mut self, token: &Token, value: Object) {
+        if self.values.contains_key(&token.lexeme) {
+            self.values.insert(token.lexeme.clone(), value);
+        } else if let Some(enclosing) = &mut self.enclosing {
+            enclosing.assign(token, value)
+        } else {
+            panic!("Undefined variable '{}'.", token.lexeme);
+        }
+    }
+
     fn get(&self, token: &Token) -> Object {
-        self.values.get(&token.lexeme)
-            .expect(&*format!("Undefined variable '{}'.", token.lexeme)).clone()
+        let res = self.values.get(&token.lexeme);
+        if let Some(r) = res {
+            r.clone()
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.get(token)
+        } else {
+            panic!("Undefined variable '{}'.", token.lexeme);
+        }
     }
 }
 
@@ -67,6 +91,11 @@ fn checked_string(o: Object) -> Option<String> {
 impl Interpreter {
     pub fn interpret_statement(&mut self, statement: Stmt) -> Result<()> {
         match statement {
+            Stmt::Block(decls) => {
+                for decl in decls {
+                    self.interpret_statement(decl)?
+                }
+            }
             Stmt::Expr(expr) => { self.interpret(expr)?; }
             Stmt::Print(expr) => println!("{}", self.interpret(expr)?),
             Stmt::Var(token, expr) => { 
@@ -81,8 +110,13 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn interpret(&self, expr: Box<Expr>) -> Result<Object> {
+    pub fn interpret(&mut self, expr: Box<Expr>) -> Result<Object> {
         match *expr {
+            Expr::Assign(name, right) => {
+                let value = self.interpret(right)?;
+                self.env.assign(&name, value.clone());
+                Ok(value)
+            },
             Expr::Variable(name) => Ok(self.env.get(&name)),
             Expr::Literal(obj) => Ok(obj),
             Expr::Grouping(ex) => self.interpret(ex),

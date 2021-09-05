@@ -46,12 +46,12 @@ impl Parser {
         };
         if res.is_err() {
             self.synchronize();
-            panic!("super")
+            panic!("super");
         } else {
             res
         }
     }
-
+    
     fn var_declaration(&mut self) -> Result<Stmt> {
         let name = self.consume(&TokenType::Identifier, "Expect variable name.".to_string())?;
         let mut initializer = None;
@@ -66,6 +66,8 @@ impl Parser {
     fn statement(&mut self) -> Result<Stmt> {
         if self.matches(&[TokenType::Print]) {
             self.print_statement()
+        } else if self.matches(&[TokenType::LeftBrace]) {
+            self.block()
         } else {
             self.expr_statement()
         }
@@ -83,8 +85,36 @@ impl Parser {
         Ok(Stmt::Expr(expr))
     }
 
+    fn block(&mut self) -> Result<Stmt> {
+        let mut statements = vec![];
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(&TokenType::RightBrace, "Expect '}' after block.".to_string())?;
+        Ok(Stmt::Block(statements))
+    }
+
     fn expression(&mut self) -> Result<Box<Expr>> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Box<Expr>> {
+        let expr = self.equality()?;
+
+        if self.matches(&[TokenType::Equal]) {
+            let token = self.previous();
+            let value = self.assignment()?;
+
+            if let Expr::Variable(name) = *expr {
+                return Ok(Box::new(Expr::Assign(name, value)));
+            } else {
+                self.error(token, "Invalid assignment target.".to_string())
+            }
+        } else {
+            Ok(expr)
+        }
+
     }
 
     fn equality(&mut self) -> Result<Box<Expr>> {
