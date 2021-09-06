@@ -6,29 +6,31 @@ use crate::token::Token;
 use crate::LoxError;
 
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Environment {
-    enclosing: Option<Box<Environment>>,
-    values: HashMap<String, Object>,
+    enclosing: Rc<RefCell<Option<Environment>>>,
+    values: Rc<RefCell<HashMap<String, Object>>>,
 }
 
 impl Environment {
     fn new(enclosing: Environment) -> Self {
         Environment {
-            enclosing: Some(Box::new(enclosing)),
-            values: HashMap::new(),
+            enclosing: Rc::new(RefCell::new(Some(enclosing))),
+            values: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     fn define(&mut self, name: String, value: Object) {
-        self.values.insert(name, value);
+        self.values.borrow_mut().insert(name, value);
     }
 
-    fn assign(&mut self, token: &Token, value: Object) {
-        if self.values.contains_key(&token.lexeme) {
-            self.values.insert(token.lexeme.clone(), value);
-        } else if let Some(enclosing) = &mut self.enclosing {
+    fn assign(&self, token: &Token, value: Object) {
+        if self.values.borrow().contains_key(&token.lexeme) {
+            self.values.borrow_mut().insert(token.lexeme.clone(), value);
+        } else if let Some(enclosing) = &*self.enclosing.borrow() {
             enclosing.assign(token, value)
         } else {
             panic!("Undefined variable '{}'.", token.lexeme);
@@ -36,10 +38,11 @@ impl Environment {
     }
 
     fn get(&self, token: &Token) -> Object {
-        let res = self.values.get(&token.lexeme);
+        let values = self.values.borrow();
+        let res = values.get(&token.lexeme);
         if let Some(r) = res {
             r.clone()
-        } else if let Some(enclosing) = &self.enclosing {
+        } else if let Some(enclosing) = &*self.enclosing.borrow() {
             enclosing.get(token)
         } else {
             panic!("Undefined variable '{}'.", token.lexeme);
@@ -92,8 +95,13 @@ impl Interpreter {
     pub fn interpret_statement(&mut self, statement: Stmt) -> Result<()> {
         match statement {
             Stmt::Block(decls) => {
-                for decl in decls {
-                    self.interpret_statement(decl)?
+                self.execute_block(decls)?;
+            }
+            Stmt::If(expr, then_branch, else_branch) => {
+                if is_thruthy(&self.interpret(expr)?) {
+                    self.interpret_statement(*then_branch)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.interpret_statement(*else_branch)?;
                 }
             }
             Stmt::Expr(expr) => { self.interpret(expr)?; }
@@ -110,7 +118,18 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn interpret(&mut self, expr: Box<Expr>) -> Result<Object> {
+    fn execute_block(&mut self, decls: Vec<Stmt>) -> Result<()>{
+        let previous = self.env.clone();
+
+        self.env = Environment::new(self.env.clone());
+        for decl in decls {
+            self.interpret_statement(decl)?;
+        }
+        self.env = previous;
+        Ok(())
+    }
+
+    fn interpret(&mut self, expr: Box<Expr>) -> Result<Object> {
         match *expr {
             Expr::Assign(name, right) => {
                 let value = self.interpret(right)?;
