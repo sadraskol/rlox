@@ -92,33 +92,38 @@ fn checked_string(o: Object) -> Option<String> {
 }
 
 impl Interpreter {
-    pub fn interpret_statement(&mut self, statement: Stmt) -> Result<()> {
+    pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<()> {
         match statement {
             Stmt::Block(decls) => {
                 self.execute_block(decls)?;
             }
             Stmt::If(expr, then_branch, else_branch) => {
-                if is_thruthy(&self.interpret(expr)?) {
-                    self.interpret_statement(*then_branch)?;
+                if is_thruthy(&self.interpret(&expr)?) {
+                    self.interpret_statement(&then_branch)?;
                 } else if let Some(else_branch) = else_branch {
-                    self.interpret_statement(*else_branch)?;
+                    self.interpret_statement(&else_branch)?;
                 }
             }
-            Stmt::Expr(expr) => { self.interpret(expr)?; }
-            Stmt::Print(expr) => println!("{}", self.interpret(expr)?),
+            Stmt::While(expr, body) => {
+                while is_thruthy(&self.interpret(&expr)?) {
+                    self.interpret_statement(&body)?;
+                }
+            }
+            Stmt::Expr(expr) => { self.interpret(&expr)?; }
+            Stmt::Print(expr) => println!("{}", self.interpret(&expr)?),
             Stmt::Var(token, expr) => { 
                 let init = if let Some(e) = expr {
-                    self.interpret(e)?
+                    self.interpret(&e)?
                 } else {
                     Object::Nil
                 };
-                self.env.define(token.lexeme, init);
+                self.env.define(token.lexeme.clone(), init);
             }
         };
         Ok(())
     }
 
-    fn execute_block(&mut self, decls: Vec<Stmt>) -> Result<()>{
+    fn execute_block(&mut self, decls: &Vec<Stmt>) -> Result<()>{
         let previous = self.env.clone();
 
         self.env = Environment::new(self.env.clone());
@@ -129,18 +134,18 @@ impl Interpreter {
         Ok(())
     }
 
-    fn interpret(&mut self, expr: Box<Expr>) -> Result<Object> {
-        match *expr {
+    fn interpret(&mut self, expr: &Expr) -> Result<Object> {
+        match expr {
             Expr::Assign(name, right) => {
-                let value = self.interpret(right)?;
+                let value = self.interpret(&right)?;
                 self.env.assign(&name, value.clone());
                 Ok(value)
             },
             Expr::Variable(name) => Ok(self.env.get(&name)),
-            Expr::Literal(obj) => Ok(obj),
-            Expr::Grouping(ex) => self.interpret(ex),
+            Expr::Literal(obj) => Ok(obj.clone()),
+            Expr::Grouping(ex) => self.interpret(&ex),
             Expr::Unary(op, right) => {
-                let right = self.interpret(right)?;
+                let right = self.interpret(&right)?;
 
                 match op.kind {
                     TokenType::Bang => {
@@ -152,61 +157,76 @@ impl Interpreter {
                     }
                     TokenType::Minus => {
                         let n = checked_number(right)
-                            .ok_or_else(|| LoxError::error_tok(op, "Operand must be a number.".to_string()))?;
+                            .ok_or_else(|| LoxError::error_tok(op.clone(), "Operand must be a number.".to_string()))?;
                         Ok(Object::Number(-n))
                     }
-                    _ => Err(LoxError::error_tok(op, "Unknown unary operator.".to_string())),
+                    _ => Err(LoxError::error_tok(op.clone(), "Unknown unary operator.".to_string())),
                 }
             }
+            Expr::Logical(left, op, right) => {
+                let left = self.interpret(&left)?;
+
+                if op.kind == TokenType::Or {
+                    if is_thruthy(&left) {
+                        return Ok(left);
+                    }
+                } else {
+                    if !is_thruthy(&left) {
+                        return Ok(left);
+                    }
+                }
+
+                self.interpret(&right)
+            }
             Expr::Binary(left, op, right) => {
-                let left = self.interpret(left)?;
-                let right = self.interpret(right)?;
+                let left = self.interpret(&left)?;
+                let right = self.interpret(&right)?;
 
                 match op.kind {
                     TokenType::Minus => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Number(l - r))
                     }
                     TokenType::Slash => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Number(l / r))
                     }
                     TokenType::Star => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Number(l * r))
                     }
                     TokenType::Plus => {
                         if let Object::Number(l) = left {
-                            let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must two numbers or two strings.".to_string()))?;
+                            let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))?;
                             Ok(Object::Number(l + r))
                         } else if let Object::String(l) = left {
-                            let r = checked_string(right).ok_or_else(|| LoxError::error_tok(op, "Operands must two numbers or two strings.".to_string()))?;
+                            let r = checked_string(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))?;
                             Ok(Object::String(format!("{}{}", l, r)))
                         } else {
-                            Err(LoxError::error_tok(op, "Operands must two numbers or two strings.".to_string()))
+                            Err(LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))
                         }
                     }
                     TokenType::Greater => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Bool(l > r))
                     }
                     TokenType::GreaterEqual => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Bool(l >= r))
                     }
                     TokenType::Less => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Bool(l < r))
                     }
                     TokenType::LessEqual => {
                         let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op, "Operands must be numbers.".to_string()))?;
+                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
                         Ok(Object::Bool(l <= r))
                     }
                     TokenType::BangEqual => Ok(Object::Bool(!is_equal(&left, &right))),

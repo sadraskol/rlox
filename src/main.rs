@@ -85,7 +85,7 @@ impl Lox {
         let mut interpreter = Interpreter::default();
 
         for statement in statements {
-            interpreter.interpret_statement(statement)?;
+            interpreter.interpret_statement(&statement)?;
         }
 
         Ok(())
