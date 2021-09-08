@@ -159,11 +159,18 @@ impl Interpreter {
     fn execute_block(&mut self, decls: &Vec<Stmt>, env: Environment) -> std::result::Result<(), InterpreterError> {
         let previous = self.env.clone();
 
-        println!("{:?}", self.env);
         self.env = env;
+
         for decl in decls {
-            self.interpret_statement(decl)?;
+            let res = self.interpret_statement(decl);
+            if let Err(InterpreterError::Return(t, v)) = res {
+                self.env = previous;
+                return Err(InterpreterError::Return(t, v))
+            } else {
+                res?;
+            }
         }
+
         self.env = previous;
         Ok(())
     }
