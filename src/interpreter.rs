@@ -1,15 +1,16 @@
 use crate::expr::Expr;
 use crate::expr::Stmt;
 use crate::token::Object;
-use crate::token::TokenType;
+use crate::token::LoxFn;
 use crate::token::Token;
+use crate::token::TokenType;
 use crate::LoxError;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Environment {
     enclosing: Rc<RefCell<Option<Environment>>>,
     values: Rc<RefCell<HashMap<String, Object>>>,
@@ -23,7 +24,7 @@ impl Environment {
         }
     }
 
-    fn define(&mut self, name: String, value: Object) {
+    fn define(&self, name: String, value: Object) {
         self.values.borrow_mut().insert(name, value);
     }
 
@@ -50,9 +51,20 @@ impl Environment {
     }
 }
 
-#[derive(Default)]
 pub struct Interpreter {
     env: Environment,
+    globals: Environment,
+}
+
+impl Interpreter {
+    pub fn new() -> Self {
+        let globals = Environment::default();
+        globals.define("clock".to_string(), Object::Callable(0, LoxFn::Clock));
+        Interpreter {
+            env: globals.clone(),
+            globals,
+        }
+    }
 }
 
 type Result<T> = crate::Result<T>;
@@ -91,12 +103,31 @@ fn checked_string(o: Object) -> Option<String> {
     }
 }
 
+pub enum InterpreterError {
+    Lox(LoxError),
+    Return(Box<Token>, Object),
+}
+
+impl From<LoxError> for InterpreterError {
+    fn from(err: LoxError) -> Self {
+        InterpreterError::Lox(err)
+    }
+}
+
 impl Interpreter {
-    pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<()> {
+    pub fn interpret_statement(&mut self, statement: &Stmt) -> std::result::Result<(), InterpreterError> {
         match statement {
             Stmt::Block(decls) => {
-                self.execute_block(decls)?;
+                self.execute_block(decls, Environment::new(self.env.clone()))?;
             }
+            Stmt::Return(tok, expr) => {
+                let value = self.interpret(expr)?;
+                Err(InterpreterError::Return(tok.clone(), value))?;
+            }
+            Stmt::Fn(name, args, body) => {
+                let fun = Object::Callable(args.len(), LoxFn::UserDef(name.clone(), args.clone(), body.clone()));
+                self.env.define(name.lexeme.clone(), fun);
+            },
             Stmt::If(expr, then_branch, else_branch) => {
                 if is_thruthy(&self.interpret(&expr)?) {
                     self.interpret_statement(&then_branch)?;
@@ -109,9 +140,11 @@ impl Interpreter {
                     self.interpret_statement(&body)?;
                 }
             }
-            Stmt::Expr(expr) => { self.interpret(&expr)?; }
+            Stmt::Expr(expr) => {
+                self.interpret(&expr)?;
+            }
             Stmt::Print(expr) => println!("{}", self.interpret(&expr)?),
-            Stmt::Var(token, expr) => { 
+            Stmt::Var(token, expr) => {
                 let init = if let Some(e) = expr {
                     self.interpret(&e)?
                 } else {
@@ -123,10 +156,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, decls: &Vec<Stmt>) -> Result<()>{
+    fn execute_block(&mut self, decls: &Vec<Stmt>, env: Environment) -> std::result::Result<(), InterpreterError> {
         let previous = self.env.clone();
 
-        self.env = Environment::new(self.env.clone());
+        println!("{:?}", self.env);
+        self.env = env;
         for decl in decls {
             self.interpret_statement(decl)?;
         }
@@ -140,10 +174,34 @@ impl Interpreter {
                 let value = self.interpret(&right)?;
                 self.env.assign(&name, value.clone());
                 Ok(value)
-            },
+            }
             Expr::Variable(name) => Ok(self.env.get(&name)),
             Expr::Literal(obj) => Ok(obj.clone()),
             Expr::Grouping(ex) => self.interpret(&ex),
+            Expr::Call(callee_expr, token, args) => {
+                let callee = self.interpret(callee_expr)?;
+
+                let mut arguments = vec![];
+                for arg in args {
+                    arguments.push(self.interpret(arg)?);
+                }
+
+                if let Object::Callable(arity, f) = callee {
+                    if arity != arguments.len() {
+                        Err(LoxError::error_tok(
+                            token.clone(),
+                            format!("Expected {} arguments but got {}.", arity, arguments.len()),
+                        ))
+                    } else {
+                        self.call(f, arguments)
+                    }
+                } else {
+                    Err(LoxError::error_tok(
+                        token.clone(),
+                        "Can only call functions and classes.".to_string(),
+                    ))
+                }
+            }
             Expr::Unary(op, right) => {
                 let right = self.interpret(&right)?;
 
@@ -156,11 +214,15 @@ impl Interpreter {
                         }
                     }
                     TokenType::Minus => {
-                        let n = checked_number(right)
-                            .ok_or_else(|| LoxError::error_tok(op.clone(), "Operand must be a number.".to_string()))?;
+                        let n = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operand must be a number.".to_string())
+                        })?;
                         Ok(Object::Number(-n))
                     }
-                    _ => Err(LoxError::error_tok(op.clone(), "Unknown unary operator.".to_string())),
+                    _ => Err(LoxError::error_tok(
+                        op.clone(),
+                        "Unknown unary operator.".to_string(),
+                    )),
                 }
             }
             Expr::Logical(left, op, right) => {
@@ -184,54 +246,116 @@ impl Interpreter {
 
                 match op.kind {
                     TokenType::Minus => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Number(l - r))
                     }
                     TokenType::Slash => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Number(l / r))
                     }
                     TokenType::Star => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Number(l * r))
                     }
                     TokenType::Plus => {
                         if let Object::Number(l) = left {
-                            let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))?;
+                            let r = checked_number(right).ok_or_else(|| {
+                                LoxError::error_tok(
+                                    op.clone(),
+                                    "Operands must two numbers or two strings.".to_string(),
+                                )
+                            })?;
                             Ok(Object::Number(l + r))
                         } else if let Object::String(l) = left {
-                            let r = checked_string(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))?;
+                            let r = checked_string(right).ok_or_else(|| {
+                                LoxError::error_tok(
+                                    op.clone(),
+                                    "Operands must two numbers or two strings.".to_string(),
+                                )
+                            })?;
                             Ok(Object::String(format!("{}{}", l, r)))
                         } else {
-                            Err(LoxError::error_tok(op.clone(), "Operands must two numbers or two strings.".to_string()))
+                            Err(LoxError::error_tok(
+                                op.clone(),
+                                "Operands must two numbers or two strings.".to_string(),
+                            ))
                         }
                     }
                     TokenType::Greater => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Bool(l > r))
                     }
                     TokenType::GreaterEqual => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Bool(l >= r))
                     }
                     TokenType::Less => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Bool(l < r))
                     }
                     TokenType::LessEqual => {
-                        let l = checked_number(left).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
-                        let r = checked_number(right).ok_or_else(|| LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string()))?;
+                        let l = checked_number(left).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
+                        let r = checked_number(right).ok_or_else(|| {
+                            LoxError::error_tok(op.clone(), "Operands must be numbers.".to_string())
+                        })?;
                         Ok(Object::Bool(l <= r))
                     }
                     TokenType::BangEqual => Ok(Object::Bool(!is_equal(&left, &right))),
                     TokenType::EqualEqual => Ok(Object::Bool(is_equal(&left, &right))),
                     _ => Ok(Object::Nil),
+                }
+            }
+        }
+    }
+
+    fn call(&mut self, callee: LoxFn, arguments: Vec<Object>) -> Result<Object> {
+        match callee {
+            LoxFn::Clock => {
+                let x = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
+                Ok(Object::Number(x.as_secs() as f64))
+            }
+            LoxFn::UserDef(_, args, body) => {
+                let env = Environment::new(self.globals.clone());
+                for i in 0..args.len() {
+                    env.define(args[i].lexeme.clone(), arguments[i].clone());
+                }
+
+                match self.execute_block(&body, env) {
+                    Err(InterpreterError::Return(_, v)) => Ok(v),
+                    Err(InterpreterError::Lox(e)) => Err(e),
+                    _ => Ok(Object::Nil)
                 }
             }
         }

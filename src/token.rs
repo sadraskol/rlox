@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use crate::expr::Stmt;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
@@ -52,7 +53,27 @@ pub enum Object {
     String(String),
     Number(f64),
     Bool(bool),
+    Callable(usize, LoxFn),
     Nil,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoxFn {
+    UserDef(Box<Token>, Vec<Box<Token>>, Vec<Stmt>),
+    Clock,
+}
+
+impl Display for LoxFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoxFn::Clock => {
+                write!(f, "clock")
+            }
+            LoxFn::UserDef(name, _, _) => {
+                write!(f, "{}", name.lexeme)
+            }
+        }
+    }
 }
 
 impl Display for Object {
@@ -65,15 +86,16 @@ impl Display for Object {
                 } else {
                     write!(f, "{}", s)
                 }
-            },
+            }
             Object::String(s) => write!(f, "{}", s),
             Object::Bool(b) => write!(f, "{}", b),
+            Object::Callable(_, fun) => write!(f, "<fun {}>", fun),
             Object::Nil => write!(f, "nil"),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenType,
     pub lexeme: String,

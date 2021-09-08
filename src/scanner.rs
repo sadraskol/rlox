@@ -112,7 +112,10 @@ impl Scanner {
                 } else if c.is_alphabetic() || c == '_' {
                     self.identifier();
                 } else {
-                    return Err(LoxError::error(self.line, format!("Unexpected character {}", c)));
+                    return Err(LoxError::error(
+                        self.line,
+                        format!("Unexpected character {}", c),
+                    ));
                 }
             }
         }
@@ -192,7 +195,10 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            return Err(LoxError::error(self.line, "Unterminated string.".to_string()));
+            return Err(LoxError::error(
+                self.line,
+                "Unterminated string.".to_string(),
+            ));
         }
 
         self.advance();

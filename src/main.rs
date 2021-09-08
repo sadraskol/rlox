@@ -1,6 +1,7 @@
 use std::env::args;
 
 use crate::interpreter::Interpreter;
+use crate::interpreter::InterpreterError;
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::token::Token;
@@ -13,10 +14,6 @@ mod scanner;
 mod token;
 
 fn main() {
-    for a in args() {
-        println!("{}", a);
-    }
-
     match args().count() {
         2 => {
             let mut args = args();
@@ -82,10 +79,14 @@ impl Lox {
         let tokens = scanner.scan_tokens()?;
         let mut parser = Parser::new(tokens);
         let statements = parser.parse()?;
-        let mut interpreter = Interpreter::default();
+        let mut interpreter = Interpreter::new();
 
         for statement in statements {
-            interpreter.interpret_statement(&statement)?;
+            match interpreter.interpret_statement(&statement) {
+                Err(InterpreterError::Return(tok, _)) => Err(LoxError::error_tok(tok, "Unexpected return in the main body.".to_string())),
+                Err(InterpreterError::Lox(e)) => Err(e),
+                _ => Ok(()),
+            }?;
         }
 
         Ok(())
