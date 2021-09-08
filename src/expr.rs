@@ -4,23 +4,23 @@ use crate::token::Token;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Block(Vec<Stmt>),
-    Expr(Box<Expr>),
-    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
-    While(Box<Expr>, Box<Stmt>),
-    Print(Box<Expr>),
-    Return(Box<Token>, Box<Expr>),
-    Var(Box<Token>, Option<Box<Expr>>),
-    Fn(Box<Token>, Vec<Box<Token>>, Vec<Stmt>),
+    Expr(Expr),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
+    Print(Expr),
+    Return(Token, Expr),
+    Var(Token, Option<Expr>),
+    Fn(Token, Vec<Token>, Vec<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Assign(Box<Token>, Box<Expr>),
-    Binary(Box<Expr>, Box<Token>, Box<Expr>),
-    Call(Box<Expr>, Box<Token>, Vec<Box<Expr>>),
+    Assign(Token, Box<Expr>),
+    Binary(Box<Expr>, Token, Box<Expr>),
+    Call(Box<Expr>, Token, Vec<Expr>),
     Grouping(Box<Expr>),
-    Logical(Box<Expr>, Box<Token>, Box<Expr>),
-    Unary(Box<Token>, Box<Expr>),
+    Logical(Box<Expr>, Token, Box<Expr>),
+    Unary(Token, Box<Expr>),
     Literal(Object),
-    Variable(Box<Token>),
+    Variable(Token),
 }

@@ -49,7 +49,7 @@ impl LoxError {
         Self::report(line, "".to_string(), message)
     }
 
-    pub fn error_tok(token: Box<Token>, message: String) -> Self {
+    pub fn error_tok(token: &Token, message: String) -> Self {
         if token.kind == TokenType::Eof {
             Self::report(token.line, " at end".to_string(), message)
         } else {
@@ -83,7 +83,10 @@ impl Lox {
 
         for statement in statements {
             match interpreter.interpret_statement(&statement) {
-                Err(InterpreterError::Return(tok, _)) => Err(LoxError::error_tok(tok, "Unexpected return in the main body.".to_string())),
+                Err(InterpreterError::Return(tok, _)) => Err(LoxError::error_tok(
+                    &tok,
+                    "Unexpected return in the main body.".to_string(),
+                )),
                 Err(InterpreterError::Lox(e)) => Err(e),
                 _ => Ok(()),
             }?;

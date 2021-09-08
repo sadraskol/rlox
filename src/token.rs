@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use crate::expr::Stmt;
+use std::fmt::Display;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
@@ -59,7 +59,7 @@ pub enum Object {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoxFn {
-    UserDef(Box<Token>, Vec<Box<Token>>, Vec<Stmt>),
+    UserDef(Box<Token>, Vec<Token>, Vec<Stmt>),
     Clock,
 }
 
