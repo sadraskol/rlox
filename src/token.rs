@@ -1,5 +1,6 @@
 use crate::expr::Stmt;
 use std::fmt::Display;
+use crate::interpreter::Environment;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
@@ -59,7 +60,7 @@ pub enum Object {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoxFn {
-    UserDef(Box<Token>, Vec<Token>, Vec<Stmt>),
+    UserDef(Box<Token>, Vec<Token>, Vec<Stmt>, Environment),
     Clock,
 }
 
@@ -69,7 +70,7 @@ impl Display for LoxFn {
             LoxFn::Clock => {
                 write!(f, "clock")
             }
-            LoxFn::UserDef(name, _, _) => {
+            LoxFn::UserDef(name, _, _, _) => {
                 write!(f, "{}", name.lexeme)
             }
         }

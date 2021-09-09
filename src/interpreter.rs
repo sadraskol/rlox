@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Environment {
     enclosing: Rc<RefCell<Option<Environment>>>,
     values: Rc<RefCell<HashMap<String, Object>>>,
@@ -52,8 +52,7 @@ impl Environment {
 }
 
 pub struct Interpreter {
-    env: Environment,
-    globals: Environment,
+    env: Environment
 }
 
 impl Interpreter {
@@ -61,8 +60,7 @@ impl Interpreter {
         let globals = Environment::default();
         globals.define("clock".to_string(), Object::Callable(0, LoxFn::Clock));
         Interpreter {
-            env: globals.clone(),
-            globals,
+            env: globals,
         }
     }
 }
@@ -130,7 +128,7 @@ impl Interpreter {
             Stmt::Fn(name, args, body) => {
                 let fun = Object::Callable(
                     args.len(),
-                    LoxFn::UserDef(Box::new(name.clone()), args.clone(), body.clone()),
+                    LoxFn::UserDef(Box::new(name.clone()), args.clone(), body.clone(), self.env.clone()),
                 );
                 self.env.define(name.lexeme.clone(), fun);
             }
@@ -363,8 +361,8 @@ impl Interpreter {
                     .unwrap();
                 Ok(Object::Number(x.as_secs() as f64))
             }
-            LoxFn::UserDef(_, args, body) => {
-                let env = Environment::new(self.globals.clone());
+            LoxFn::UserDef(_, args, body, closure) => {
+                let env = Environment::new(closure);
                 for i in 0..args.len() {
                     env.define(args[i].lexeme.clone(), arguments[i].clone());
                 }
