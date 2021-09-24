@@ -247,8 +247,8 @@ impl Parser {
             let token = self.previous();
             let value = self.assignment()?;
 
-            if let Expr::Variable(name) = expr {
-                Ok(Expr::Assign(name, Box::new(value)))
+            if let Expr::Variable(name, depth) = expr {
+                Ok(Expr::Assign(name, Box::new(value), depth))
             } else {
                 self.error(token, "Invalid assignment target.".to_string())
             }
@@ -387,7 +387,7 @@ impl Parser {
         } else if self.matches(&[TokenType::True]) {
             Ok(Expr::Literal(Object::Bool(true)))
         } else if self.matches(&[TokenType::Identifier]) {
-            Ok(Expr::Variable(self.previous()))
+            Ok(Expr::Variable(self.previous(), None))
         } else if self.matches(&[TokenType::Nil]) {
             Ok(Expr::Literal(Object::Nil))
         } else if self.matches(&[TokenType::Number, TokenType::String]) {

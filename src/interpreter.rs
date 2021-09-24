@@ -38,6 +38,16 @@ impl Environment {
         }
     }
 
+    fn assign_at(&self, depth: usize, token: &Token, value: Object) {
+        if depth == 0 {
+            self.assign(token, value);
+        } else if let Some(enclosing) = &*self.enclosing.borrow() {
+            enclosing.assign_at(depth - 1, token, value);
+        } else {
+            panic!("Variable scope not found for '{}'.", token.lexeme);
+        }
+    }
+
     fn get(&self, token: &Token) -> Object {
         let values = self.values.borrow();
         let res = values.get(&token.lexeme);
@@ -49,20 +59,21 @@ impl Environment {
             panic!("Undefined variable '{}'.", token.lexeme);
         }
     }
+    
+    fn get_at(&self, depth: usize, token: &Token) -> Object {
+        if depth == 0 {
+            self.get(token)
+        } else if let Some(enclosing) = &*self.enclosing.borrow() {
+            enclosing.get_at(depth - 1, token)
+        } else {
+            panic!("Variable scope not found for '{}'.", token.lexeme);
+        }
+    }
 }
 
 pub struct Interpreter {
-    env: Environment
-}
-
-impl Interpreter {
-    pub fn new() -> Self {
-        let globals = Environment::default();
-        globals.define("clock".to_string(), Object::Callable(0, LoxFn::Clock));
-        Interpreter {
-            env: globals,
-        }
-    }
+    env: Environment,
+    globals: Environment
 }
 
 type Result<T> = crate::Result<T>;
@@ -113,6 +124,15 @@ impl From<LoxError> for InterpreterError {
 }
 
 impl Interpreter {
+    pub fn new() -> Self {
+        let globals = Environment::default();
+        globals.define("clock".to_string(), Object::Callable(0, LoxFn::Clock));
+        Interpreter {
+            env: globals.clone(),
+            globals
+        }
+    }
+
     pub fn interpret_statement(
         &mut self,
         statement: &Stmt,
@@ -185,12 +205,18 @@ impl Interpreter {
 
     fn interpret(&mut self, expr: &Expr) -> Result<Object> {
         match expr {
-            Expr::Assign(name, right) => {
+            Expr::Assign(name, right, depth) => {
                 let value = self.interpret(right)?;
-                self.env.assign(name, value.clone());
+                if let Some(depth) = depth {
+                    self.env.assign_at(*depth, name, value.clone());
+                } else {
+                    self.env.assign(name, value.clone());
+                }
                 Ok(value)
             }
-            Expr::Variable(name) => Ok(self.env.get(name)),
+            Expr::Variable(name, depth) => {
+                Ok(self.lookup_variable(name, *depth))
+            },
             Expr::Literal(obj) => Ok(obj.clone()),
             Expr::Grouping(ex) => self.interpret(ex),
             Expr::Call(callee_expr, token, args) => {
@@ -350,6 +376,14 @@ impl Interpreter {
                     _ => Ok(Object::Nil),
                 }
             }
+        }
+    }
+
+    fn lookup_variable(&mut self, name: &Token, depth: Option<usize>) -> Object {
+        if let Some(depth) = depth {
+            self.env.get_at(depth, name)
+        } else {
+            self.globals.get(name)
         }
     }
 

@@ -2,7 +2,7 @@ use crate::expr::Stmt;
 use std::fmt::Display;
 use crate::interpreter::Environment;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenType {
     LeftParen,
     RightParen,

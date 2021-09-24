@@ -6,12 +6,14 @@ use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::token::Token;
 use crate::token::TokenType;
+use crate::resolver::Resolver;
 
 mod expr;
 mod interpreter;
 mod parser;
 mod scanner;
 mod token;
+mod resolver;
 
 fn main() {
     match args().count() {
@@ -78,7 +80,15 @@ impl Lox {
         let mut scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens()?;
         let mut parser = Parser::new(tokens);
-        let statements = parser.parse()?;
+        let mut statements = parser.parse()?;
+        match Resolver::new().resolve_all(&mut statements) {
+            Err(InterpreterError::Return(tok, _)) => Err(LoxError::error_tok(
+                &tok,
+                "Unexpected return in the main body.".to_string(),
+            )),
+            Err(InterpreterError::Lox(e)) => Err(e),
+            _ => Ok(()),
+        }?;
         let mut interpreter = Interpreter::new();
 
         for statement in statements {

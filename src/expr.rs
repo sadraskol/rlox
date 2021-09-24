@@ -15,12 +15,12 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Assign(Token, Box<Expr>),
+    Assign(Token, Box<Expr>, Option<usize> /* depth of the variable */),
     Binary(Box<Expr>, Token, Box<Expr>),
     Call(Box<Expr>, Token, Vec<Expr>),
     Grouping(Box<Expr>),
     Logical(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
     Literal(Object),
-    Variable(Token),
+    Variable(Token, Option<usize> /* depth of the variable */),
 }
