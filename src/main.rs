@@ -1,5 +1,7 @@
 use std::convert::TryInto;
 
+mod compiler;
+
 type Value = f64;
 
 enum OpCode {
@@ -48,15 +50,15 @@ struct VM<'a> {
 }
 
 enum InterpretResult {
-    InterpretOk
+    InterpretOk,
 }
 
-impl <'a> VM<'a> {
+impl<'a> VM<'a> {
     fn new(chunk: &'a Chunk) -> Self {
         VM {
             chunk,
             ip: 0,
-            stack: vec![]
+            stack: vec![],
         }
     }
 
@@ -75,40 +77,40 @@ impl <'a> VM<'a> {
             match instruction.into() {
                 OpCode::OpReturn => {
                     println!("'{}'", self.pop());
-                    return InterpretResult::InterpretOk
-                },
+                    return InterpretResult::InterpretOk;
+                }
                 OpCode::OpConstant => {
-                    let bytes = &self.chunk.code[self.ip..self.ip+4];
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
                     self.ip += 4;
                     let sized_bytes = bytes.try_into().unwrap();
                     let index = u32::from_be_bytes(sized_bytes);
                     let constant = self.chunk.constants[index as usize];
                     self.stack.push(constant);
-                },
+                }
                 OpCode::OpDivide => {
                     let b = self.pop();
                     let a = self.pop();
                     self.push(a / b);
-                },
+                }
                 OpCode::OpAdd => {
                     let b = self.pop();
                     let a = self.pop();
                     self.push(a + b);
-                },
+                }
                 OpCode::OpNegate => {
                     let neg = -self.pop();
                     self.push(neg);
-                },
+                }
                 OpCode::OpMultiply => {
                     let b = self.pop();
                     let a = self.pop();
                     self.push(a * b);
-                },
+                }
                 OpCode::OpSubstract => {
                     let b = self.pop();
                     let a = self.pop();
                     self.push(a - b);
-                },
+                }
             }
         }
     }
@@ -196,12 +198,15 @@ fn disassemble_instruction(chunks: &Chunk, offset: usize) -> usize {
     match chunks.code[offset].into() {
         OpCode::OpReturn => println!("OP_RETURN"),
         OpCode::OpConstant => {
-            let bytes = &chunks.code[offset+1..offset+5];
+            let bytes = &chunks.code[offset + 1..offset + 5];
             let sized_bytes = bytes.try_into().unwrap();
             let index = u32::from_be_bytes(sized_bytes);
-            println!("OP_CONSTANT    {} '{}'", index, chunks.constants[index as usize]);
+            println!(
+                "OP_CONSTANT    {} '{}'",
+                index, chunks.constants[index as usize]
+            );
             return offset + 5;
-        },
+        }
         OpCode::OpDivide => println!("OP_DIVIDE"),
         OpCode::OpAdd => println!("OP_ADD"),
         OpCode::OpNegate => println!("OP_NEGATE"),
