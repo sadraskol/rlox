@@ -1,60 +1,25 @@
 use std::convert::TryInto;
+use crate::compiler::Parser;
+use crate::chunk::Chunk;
+use crate::chunk::Value;
+use crate::chunk::OpCode;
 
 mod compiler;
+mod chunk;
 
-type Value = f64;
-
-enum OpCode {
-    OpReturn,
-    OpConstant,
-    OpDivide,
-    OpAdd,
-    OpNegate,
-    OpMultiply,
-    OpSubstract,
-}
-
-impl From<u8> for OpCode {
-    fn from(b: u8) -> Self {
-        match b {
-            0 => OpCode::OpReturn,
-            1 => OpCode::OpConstant,
-            2 => OpCode::OpDivide,
-            3 => OpCode::OpAdd,
-            4 => OpCode::OpNegate,
-            5 => OpCode::OpMultiply,
-            6 => OpCode::OpSubstract,
-            _ => panic!("unexpected op code"),
-        }
-    }
-}
-
-impl From<OpCode> for u8 {
-    fn from(b: OpCode) -> Self {
-        match b {
-            OpCode::OpReturn => 0,
-            OpCode::OpConstant => 1,
-            OpCode::OpDivide => 2,
-            OpCode::OpAdd => 3,
-            OpCode::OpNegate => 4,
-            OpCode::OpMultiply => 5,
-            OpCode::OpSubstract => 6,
-        }
-    }
-}
-
-struct VM<'a> {
-    chunk: &'a Chunk,
+struct VM {
+    chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
 }
 
 enum InterpretResult {
-    InterpretOk,
+    Ok,
+    CompileError
 }
 
-impl<'a> VM<'a> {
-    fn new(chunk: &'a Chunk) -> Self {
+impl VM {
+    fn new(chunk: Chunk) -> Self {
         VM {
             chunk,
             ip: 0,
@@ -77,7 +42,7 @@ impl<'a> VM<'a> {
             match instruction.into() {
                 OpCode::OpReturn => {
                     println!("'{}'", self.pop());
-                    return InterpretResult::InterpretOk;
+                    return InterpretResult::Ok;
                 }
                 OpCode::OpConstant => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
@@ -114,41 +79,18 @@ impl<'a> VM<'a> {
             }
         }
     }
-}
 
-struct Chunk {
-    code: Vec<u8>,
-    lines: Vec<usize>,
-    constants: Vec<Value>,
-}
+    pub fn interpret(&mut self, source: &str) -> InterpretResult {
+        let mut compiler = Parser::init(source);
+        let chunk = compiler.compile();
 
-impl Chunk {
-    fn new() -> Self {
-        Chunk {
-            code: vec![],
-            constants: vec![],
-            lines: vec![],
+        if let Some(chunk) = chunk {
+            self.chunk = chunk;
+            self.ip = 0;
+            self.run()
+        } else {
+            InterpretResult::CompileError
         }
-    }
-
-    fn write_chunk(&mut self, code: OpCode, line: usize) {
-        self.code.push(code.into());
-        self.lines.push(line);
-    }
-
-    fn write_index(&mut self, index: u32, line: usize) {
-        for b in index.to_be_bytes() {
-            self.code.push(b);
-            self.lines.push(line);
-        }
-    }
-
-    fn add_constant(&mut self, constant: Value) -> u32 {
-        if self.constants.len() >= u32::MAX as usize {
-            panic!("cannot have more than {} constants.", u32::MAX);
-        }
-        self.constants.push(constant);
-        (self.constants.len() - 1) as u32
     }
 }
 
@@ -174,44 +116,8 @@ fn main() {
 
     chunks.write_chunk(OpCode::OpReturn, 123);
 
-    disassemble_chunk(&chunks, "test chunk");
+    chunks.disassemble("test chunk");
 
-    let mut vm = VM::new(&chunks);
+    let mut vm = VM::new(chunks);
     vm.run();
-}
-
-fn disassemble_chunk(chunks: &Chunk, name: &str) {
-    println!("== {} ==", name);
-    let mut offset = 0;
-    while offset < chunks.code.len() {
-        offset = disassemble_instruction(chunks, offset);
-    }
-}
-
-fn disassemble_instruction(chunks: &Chunk, offset: usize) -> usize {
-    print!("{:04} ", offset);
-    if offset > 0 && chunks.lines[offset] == chunks.lines[offset - 1] {
-        print!("   | ");
-    } else {
-        print!("{:4} ", chunks.lines[offset]);
-    }
-    match chunks.code[offset].into() {
-        OpCode::OpReturn => println!("OP_RETURN"),
-        OpCode::OpConstant => {
-            let bytes = &chunks.code[offset + 1..offset + 5];
-            let sized_bytes = bytes.try_into().unwrap();
-            let index = u32::from_be_bytes(sized_bytes);
-            println!(
-                "OP_CONSTANT    {} '{}'",
-                index, chunks.constants[index as usize]
-            );
-            return offset + 5;
-        }
-        OpCode::OpDivide => println!("OP_DIVIDE"),
-        OpCode::OpAdd => println!("OP_ADD"),
-        OpCode::OpNegate => println!("OP_NEGATE"),
-        OpCode::OpMultiply => println!("OP_MULTIPLY"),
-        OpCode::OpSubstract => println!("OP_SUBSTRACT"),
-    }
-    offset + 1
 }

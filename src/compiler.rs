@@ -1,3 +1,92 @@
+use crate::chunk::Chunk;
+
+pub struct Parser<'a> {
+    scanner: Scanner<'a>,
+    previous: Token<'a>,
+    current: Token<'a>,
+    had_error: bool,
+    panic_mode: bool,
+}
+
+impl<'a> Parser<'a> {
+    pub fn init(source: &'a str) -> Self {
+        Parser {
+            scanner: Scanner::init(source),
+            previous: Token {
+                kind: TokenType::Error,
+                lexeme: "before file",
+                line: 0,
+            },
+            current: Token {
+                kind: TokenType::Error,
+                lexeme: "before file",
+                line: 0,
+            },
+            had_error: false,
+            panic_mode: false,
+        }
+    }
+
+    pub fn compile(&mut self) -> Option<Chunk> {
+        let mut chunk = Chunk::new();
+
+        self.advance();
+        self.expression();
+        self.consume(TokenType::Eof, "Expecct end of expression.");
+
+        if self.had_error {
+            None
+        } else {
+            Some(chunk)
+        }
+    }
+
+    fn advance(&mut self) {
+        self.previous = self.current;
+        loop {
+            self.current = self.scanner.scan_token();
+            if self.current.kind == TokenType::Error {
+                break;
+            }
+
+            self.error_at_current(self.current.lexeme);
+        }
+    }
+
+    fn expression(&mut self) {
+        
+    }
+
+    fn consume(&mut self, kind: TokenType, msg: &str) {
+        if self.current.kind == kind {
+            self.advance();
+        } else {
+            self.error_at_current(msg);
+        }
+    }
+
+    fn error_at_current(&mut self, lexeme: &str) {
+        let at = self.current;
+        self.error_at(&at, lexeme);
+    }
+
+    fn error_at(&mut self, at: &Token<'_>, msg: &str) {
+        if self.panic_mode { return }
+        self.panic_mode = true;
+        eprint!("[line {}] Error", at.line);
+        if at.kind == TokenType::Eof {
+            eprint!(" at end");
+        } else if at.kind == TokenType::Error {
+
+        } else {
+            eprint!(" at {}", at.lexeme);
+        }
+
+        eprintln!(": {}", msg);
+        self.had_error = true;
+    }
+}
+
 struct Scanner<'a> {
     source: &'a str,
     start: usize,
@@ -15,25 +104,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn compile(&mut self) {
-        let mut line = 0;
-        loop {
-            let token = self.scan_token();
-            if token.line != line {
-                print!("{:4} ", token.line);
-                line = token.line;
-            } else {
-                print!("   | ");
-            }
-            println!("{:?} '{}'", token.kind, token.lexeme);
-
-            if token.kind == TokenType::Eof {
-                break;
-            }
-        }
-    }
-
-    fn scan_token(&mut self) -> Token<'_> {
+    fn scan_token(&mut self) -> Token<'a> {
         self.skip_whitespace();
         self.start = self.current;
         if self.is_at_end() {
@@ -94,7 +165,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn identifier(&mut self) -> Token<'_> {
+    fn identifier(&mut self) -> Token<'a> {
         while self.peek().is_alphabetic() || self.peek() == '_' || self.peek().is_numeric() {
             self.advance();
         }
@@ -149,7 +220,7 @@ impl<'a> Scanner<'a> {
         }
     }
  
-    fn number(&mut self) -> Token<'_> {
+    fn number(&mut self) -> Token<'a> {
         while self.peek().is_numeric() {
             self.advance();
         }
@@ -164,7 +235,7 @@ impl<'a> Scanner<'a> {
         self.make_token(TokenType::Number)
     }
 
-    fn string(&mut self) -> Token<'_> {
+    fn string(&mut self) -> Token<'a> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -228,7 +299,7 @@ impl<'a> Scanner<'a> {
         self.current == self.source.chars().count()
     }
 
-    fn make_token(&self, kind: TokenType) -> Token<'_> {
+    fn make_token(&self, kind: TokenType) -> Token<'a> {
         Token {
             kind,
             lexeme: &self.source[self.start..self.current],
@@ -245,13 +316,14 @@ impl<'a> Scanner<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
 struct Token<'a> {
-    kind: TokenType,
-    lexeme: &'a str,
-    line: usize,
+    pub kind: TokenType,
+    pub lexeme: &'a str,
+    pub line: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TokenType {
     LeftParen,
     RightParen,
