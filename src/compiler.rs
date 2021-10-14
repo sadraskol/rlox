@@ -1,9 +1,13 @@
+use crate::chunk::Value;
 use crate::chunk::Chunk;
+use crate::chunk::OpCode;
+use std::str::FromStr;
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
     previous: Token<'a>,
     current: Token<'a>,
+    chunk: Option<Chunk>,
     had_error: bool,
     panic_mode: bool,
 }
@@ -22,30 +26,40 @@ impl<'a> Parser<'a> {
                 lexeme: "before file",
                 line: 0,
             },
+            chunk: None,
             had_error: false,
             panic_mode: false,
         }
     }
 
     pub fn compile(&mut self) -> Option<Chunk> {
-        let mut chunk = Chunk::new();
+        self.chunk = Some(Chunk::new());
 
         self.advance();
         self.expression();
         self.consume(TokenType::Eof, "Expecct end of expression.");
+        self.end_compiler();
 
         if self.had_error {
             None
         } else {
-            Some(chunk)
+            Some(self.chunk.as_ref().unwrap().clone())
         }
+    }
+
+    fn end_compiler(&mut self) {
+        self.emit_return();
+    }
+
+    fn emit_return(&mut self) {
+        self.emit_byte(OpCode::OpReturn);
     }
 
     fn advance(&mut self) {
         self.previous = self.current;
         loop {
             self.current = self.scanner.scan_token();
-            if self.current.kind == TokenType::Error {
+            if self.current.kind != TokenType::Error {
                 break;
             }
 
@@ -57,12 +71,35 @@ impl<'a> Parser<'a> {
         
     }
 
+    fn number(&mut self) {
+        let v = f64::from_str(self.previous.lexeme).unwrap();
+        self.emit_constant(v);
+    }
+
+    fn emit_constant(&mut self, v: Value) {
+        let line = self.previous.line;
+        let chunk = self.current_chunk();
+        let i = chunk.add_constant(v);
+        chunk.write_chunk(OpCode::OpConstant, line);
+        chunk.write_index(i, line);
+    }
+
     fn consume(&mut self, kind: TokenType, msg: &str) {
         if self.current.kind == kind {
             self.advance();
         } else {
             self.error_at_current(msg);
         }
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk {
+        self.chunk.as_mut().unwrap()
+    }
+
+    fn emit_byte(&mut self, b: OpCode) {
+        let line = self.previous.line;
+        let chunk = self.current_chunk();
+        chunk.write_chunk(b, line);
     }
 
     fn error_at_current(&mut self, lexeme: &str) {

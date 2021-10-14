@@ -1,8 +1,13 @@
 // super hello
 
-fun fib(n) {
-    if (n <= 1) return n;
-    return fib(n - 2) + fib(n - 1);
-}
+var a = "global";
 
-print fib(10);
+{
+    fun showA() {
+        print a;
+    }
+
+    showA();
+    var a = "local";
+    showA();
+}

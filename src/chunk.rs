@@ -41,7 +41,7 @@ impl From<OpCode> for u8 {
     }
 }
 
-
+#[derive(Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
     lines: Vec<usize>,
