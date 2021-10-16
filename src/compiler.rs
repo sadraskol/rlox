@@ -3,6 +3,7 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use std::str::FromStr;
 
+
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
     previous: Token<'a>,
@@ -10,6 +11,75 @@ pub struct Parser<'a> {
     chunk: Option<Chunk>,
     had_error: bool,
     panic_mode: bool,
+}
+
+enum Prefix {
+    None,
+    Grouping,
+    Unary,
+    Number,
+}
+
+enum Infix {
+    None,
+    Binary,
+}
+
+struct Rule {
+    prefix: Prefix,
+    infix: Infix,
+    precedence: Precedence,
+}
+
+impl Rule {
+    fn init(prefix: Prefix, infix: Infix, precedence: Precedence) -> Self {
+        Rule {prefix, infix, precedence}
+    }
+}
+
+fn get_rule(kind: &TokenType) -> Rule {
+    match kind {
+        TokenType::LeftParen => Rule::init(Prefix::Grouping, Infix::None, Precedence::None),
+        TokenType::RightParen => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::LeftBrace => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::RightBrace => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Comma => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Dot => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Minus => Rule::init(Prefix::Unary, Infix::Binary, Precedence::Term),
+        TokenType::Plus => Rule::init(Prefix::None, Infix::Binary, Precedence::Term),
+        TokenType::Semicolon => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Slash => Rule::init(Prefix::None, Infix::Binary, Precedence::Factor),
+        TokenType::Star => Rule::init(Prefix::None, Infix::Binary, Precedence::Factor),
+        TokenType::Bang => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::BangEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Equal => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::EqualEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Greater => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::GreaterEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Less => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::LessEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Identifier => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::String => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Number => Rule::init(Prefix::Number, Infix::None, Precedence::None),
+        TokenType::And => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Class => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Else => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::False => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::For => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Fun => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::If => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Nil => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Or => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Print => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Return => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Super => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::This => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::True => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Var => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::While => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Error => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Eof => Rule::init(Prefix::None, Infix::None, Precedence::None),
+    }
 }
 
 impl<'a> Parser<'a> {
@@ -49,6 +119,7 @@ impl<'a> Parser<'a> {
 
     fn end_compiler(&mut self) {
         self.emit_return();
+        self.chunk.as_ref().unwrap().disassemble("code");
     }
 
     fn emit_return(&mut self) {
@@ -68,12 +139,62 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) {
-        
+        self.parse_precedence(Precedence::Assignment); 
+    }
+
+    fn parse_precedence(&mut self, prec: Precedence) {
+        self.advance();
+        match get_rule(&self.previous.kind).prefix {
+            Prefix::None => {
+                self.error_at_current("Expect expression.");
+                return;
+            }
+            Prefix::Grouping => self.grouping(),
+            Prefix::Unary => self.unary(),
+            Prefix::Number => self.number(),
+        }
+        while prec <= get_rule(&self.current.kind).precedence {
+            self.advance();
+            match get_rule(&self.previous.kind).infix {
+                Infix::None => {}
+                Infix::Binary => self.binary(),
+            }
+        }
     }
 
     fn number(&mut self) {
         let v = f64::from_str(self.previous.lexeme).unwrap();
         self.emit_constant(v);
+    }
+
+    fn grouping(&mut self) {
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after expression.");
+    }
+
+    fn unary(&mut self) {
+        let op_type = self.previous.kind;
+
+        self.parse_precedence(Precedence::Unary);
+
+        match op_type {
+            TokenType::Minus => self.emit_byte(OpCode::OpNegate),
+            other => panic!("unknown unary operator: {:?}", other),
+        }
+    }
+
+    fn binary(&mut self) {
+        let op_type = self.previous.kind;
+        let rule = get_rule(&op_type);
+        self.parse_precedence(rule.precedence.next());
+
+        match op_type {
+            TokenType::Plus => self.emit_byte(OpCode::OpAdd),
+            TokenType::Minus => self.emit_byte(OpCode::OpSubstract),
+            TokenType::Star => self.emit_byte(OpCode::OpMultiply),
+            TokenType::Slash => self.emit_byte(OpCode::OpDivide),
+            other => panic!("unknown binary operator: {:?}", other),
+        }
     }
 
     fn emit_constant(&mut self, v: Value) {
@@ -256,7 +377,7 @@ impl<'a> Scanner<'a> {
             TokenType::Identifier
         }
     }
- 
+
     fn number(&mut self) -> Token<'a> {
         while self.peek().is_numeric() {
             self.advance();
@@ -402,4 +523,37 @@ enum TokenType {
     While,
     Error,
     Eof,
+}
+
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+enum Precedence {
+    None,
+    Assignment,
+    Or,
+    And,
+    Equality,
+    Comparison,
+    Term,
+    Factor,
+    Unary,
+    Call,
+    Primary,
+}
+
+impl Precedence {
+    fn next(&self) -> Self {
+        match self {
+            Precedence::None => Precedence::Assignment,
+            Precedence::Assignment => Precedence::Or,
+            Precedence::Or => Precedence::And,
+            Precedence::And => Precedence::Equality,
+            Precedence::Equality => Precedence::Comparison,
+            Precedence::Comparison => Precedence::Term,
+            Precedence::Term => Precedence::Factor,
+            Precedence::Factor => Precedence::Unary,
+            Precedence::Unary => Precedence::Call,
+            Precedence::Call => Precedence::Primary,
+            Precedence::Primary => panic!("no precendence above primary!"),
+        }
+    }
 }

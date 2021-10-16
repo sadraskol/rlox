@@ -95,29 +95,5 @@ impl VM {
 }
 
 fn main() {
-    let mut chunks = Chunk::new();
-
-    let op_1 = chunks.add_constant(1.2);
-    chunks.write_chunk(OpCode::OpConstant, 123);
-    chunks.write_index(op_1, 123);
-
-    let op_2 = chunks.add_constant(3.4);
-    chunks.write_chunk(OpCode::OpConstant, 123);
-    chunks.write_index(op_2, 123);
-
-    chunks.write_chunk(OpCode::OpAdd, 123);
-
-    let op_3 = chunks.add_constant(5.6);
-    chunks.write_chunk(OpCode::OpConstant, 123);
-    chunks.write_index(op_3, 123);
-
-    chunks.write_chunk(OpCode::OpDivide, 123);
-    chunks.write_chunk(OpCode::OpNegate, 123);
-
-    chunks.write_chunk(OpCode::OpReturn, 123);
-
-    chunks.disassemble("test chunk");
-
-    let mut vm = VM::new(chunks);
-    vm.run();
+    std::fs::read_file_string(std::env::args
 }
