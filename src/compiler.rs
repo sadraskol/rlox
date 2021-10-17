@@ -18,6 +18,7 @@ enum Prefix {
     Grouping,
     Unary,
     Number,
+    Literal,
 }
 
 enum Infix {
@@ -50,31 +51,31 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::Semicolon => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Slash => Rule::init(Prefix::None, Infix::Binary, Precedence::Factor),
         TokenType::Star => Rule::init(Prefix::None, Infix::Binary, Precedence::Factor),
-        TokenType::Bang => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::BangEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Bang => Rule::init(Prefix::Unary, Infix::None, Precedence::None),
+        TokenType::BangEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Equality),
         TokenType::Equal => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::EqualEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::Greater => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::GreaterEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::Less => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::LessEqual => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::EqualEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Equality),
+        TokenType::Greater => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
+        TokenType::GreaterEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
+        TokenType::Less => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
+        TokenType::LessEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
         TokenType::Identifier => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::String => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Number => Rule::init(Prefix::Number, Infix::None, Precedence::None),
         TokenType::And => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Class => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Else => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::False => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::False => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
         TokenType::For => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Fun => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::If => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::Nil => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Nil => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
         TokenType::Or => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Print => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Return => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Super => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::This => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::True => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::True => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
         TokenType::Var => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::While => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Error => Rule::init(Prefix::None, Infix::None, Precedence::None),
@@ -149,6 +150,7 @@ impl<'a> Parser<'a> {
                 self.error_at_current("Expect expression.");
                 return;
             }
+            Prefix::Literal => self.literal(),
             Prefix::Grouping => self.grouping(),
             Prefix::Unary => self.unary(),
             Prefix::Number => self.number(),
@@ -159,6 +161,15 @@ impl<'a> Parser<'a> {
                 Infix::None => {}
                 Infix::Binary => self.binary(),
             }
+        }
+    }
+
+    fn literal(&mut self) {
+        match self.previous.kind {
+            TokenType::Nil => self.emit_constant(Value::nil()),
+            TokenType::False => self.emit_constant(Value::from_bool(false)),
+            TokenType::True => self.emit_constant(Value::from_bool(true)),
+            _ => panic!("Unsupported literal."),
         }
     }
 
@@ -179,6 +190,7 @@ impl<'a> Parser<'a> {
 
         match op_type {
             TokenType::Minus => self.emit_byte(OpCode::OpNegate),
+            TokenType::Bang => self.emit_byte(OpCode::OpNot),
             other => panic!("unknown unary operator: {:?}", other),
         }
     }
@@ -193,6 +205,21 @@ impl<'a> Parser<'a> {
             TokenType::Minus => self.emit_byte(OpCode::OpSubstract),
             TokenType::Star => self.emit_byte(OpCode::OpMultiply),
             TokenType::Slash => self.emit_byte(OpCode::OpDivide),
+            TokenType::BangEqual => {
+                self.emit_byte(OpCode::OpEqual);
+                self.emit_byte(OpCode::OpNot);
+            }
+            TokenType::EqualEqual => self.emit_byte(OpCode::OpEqual),
+            TokenType::Less => self.emit_byte(OpCode::OpLess),
+            TokenType::LessEqual => {
+                self.emit_byte(OpCode::OpGreater);
+                self.emit_byte(OpCode::OpNot);
+            }
+            TokenType::Greater => self.emit_byte(OpCode::OpGreater),
+            TokenType::GreaterEqual => {
+                self.emit_byte(OpCode::OpLess);
+                self.emit_byte(OpCode::OpNot);
+            }
             other => panic!("unknown binary operator: {:?}", other),
         }
     }

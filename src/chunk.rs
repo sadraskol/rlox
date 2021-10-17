@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Nil,
     Bool(bool),
@@ -18,6 +18,24 @@ impl Value {
         Value::Nil
     }
 
+    pub fn is_bool(&self) -> bool {
+        if let Value::Bool(_) = self {
+            true 
+        } else {
+            false
+        }
+    }
+    pub fn is_nil(&self) -> bool {
+        self == &Value::Nil
+    }
+    pub fn is_number(&self) -> bool {
+        if let Value::Number(_) = self {
+            true 
+        } else {
+            false
+        }
+    }
+
     pub fn as_number(&self) -> f64 {
         if let Value::Number(n) = self {
             *n
@@ -25,6 +43,15 @@ impl Value {
             panic!("not a number");
         }
     }
+
+    pub fn as_bool(&self) -> bool {
+        if let Value::Bool(b) = self {
+            *b
+        } else {
+            panic!("not a bool");
+        }
+    }
+
 }
 
 pub enum OpCode {
@@ -35,6 +62,10 @@ pub enum OpCode {
     OpNegate,
     OpMultiply,
     OpSubstract,
+    OpNot,
+    OpEqual,
+    OpGreater,
+    OpLess,
 }
 
 impl From<u8> for OpCode {
@@ -47,6 +78,10 @@ impl From<u8> for OpCode {
             4 => OpCode::OpNegate,
             5 => OpCode::OpMultiply,
             6 => OpCode::OpSubstract,
+            7 => OpCode::OpNot,
+            8 => OpCode::OpEqual,
+            9 => OpCode::OpGreater,
+            10 => OpCode::OpLess,
             _ => panic!("unexpected op code"),
         }
     }
@@ -62,6 +97,10 @@ impl From<OpCode> for u8 {
             OpCode::OpNegate => 4,
             OpCode::OpMultiply => 5,
             OpCode::OpSubstract => 6,
+            OpCode::OpNot => 7,
+            OpCode::OpEqual => 8,
+            OpCode::OpGreater => 9,
+            OpCode::OpLess => 10,
         }
     }
 }
@@ -69,7 +108,7 @@ impl From<OpCode> for u8 {
 #[derive(Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
-    lines: Vec<usize>,
+    pub lines: Vec<usize>,
     pub constants: Vec<Value>,
 }
 
@@ -134,6 +173,10 @@ impl Chunk {
             OpCode::OpNegate => println!("OP_NEGATE"),
             OpCode::OpMultiply => println!("OP_MULTIPLY"),
             OpCode::OpSubstract => println!("OP_SUBSTRACT"),
+            OpCode::OpNot => println!("OP_NOT"),
+            OpCode::OpEqual => println!("OP_EQUAL"),
+            OpCode::OpGreater => println!("OP_GREATER"),
+            OpCode::OpLess => println!("OP_LESS"),
         }
         offset + 1
     }

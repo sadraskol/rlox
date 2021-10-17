@@ -17,7 +17,8 @@ struct VM {
 
 enum InterpretResult {
     Ok,
-    CompileError
+    CompileError,
+    RuntimeError,
 }
 
 impl VM {
@@ -55,31 +56,96 @@ impl VM {
                     self.stack.push(constant.clone());
                 }
                 OpCode::OpDivide => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
                     let b = self.pop();
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() / b.as_number()));
                 }
                 OpCode::OpAdd => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
                     let b = self.pop();
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() + b.as_number()));
                 }
                 OpCode::OpNegate => {
+                    if !self.peek(0).is_number() {
+                        self.runtime_error("Operand must be a number.");
+                        return InterpretResult::RuntimeError;
+                    }
                     let neg = self.pop();
                     self.push(Value::from_number(-neg.as_number()));
                 }
                 OpCode::OpMultiply => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
                     let b = self.pop();
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() * b.as_number()));
                 }
                 OpCode::OpSubstract => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
                     let b = self.pop();
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() - b.as_number()));
                 }
+                OpCode::OpNot => {
+                    if !self.peek(0).is_bool() {
+                        self.runtime_error("Operand must be a bool.");
+                        return InterpretResult::RuntimeError;
+                    }
+                    let b = self.pop();
+                    self.push(Value::from_bool(!b.as_bool()));
+                }
+                OpCode::OpEqual => {
+                    let b = self.pop();
+                    let a = self.pop();
+                    self.push(Value::from_bool(a == b));
+                }
+                OpCode::OpLess => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
+                    let b = self.pop();
+                    let a = self.pop();
+                    self.push(Value::from_bool(a.as_number() < b.as_number()));
+                }
+                OpCode::OpGreater => {
+                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
+                        self.runtime_error("Operands must be numbers.");
+                        return InterpretResult::RuntimeError;
+                    }
+                    let b = self.pop();
+                    let a = self.pop();
+                    self.push(Value::from_bool(a.as_number() > b.as_number()));
+                }
             }
         }
+    }
+
+    fn peek(&self, depth: usize) -> &Value {
+        &self.stack[self.stack.len() - 1 - depth]
+    }
+
+    fn runtime_error(&mut self, msg: &str) {
+        eprintln!("{}", msg);
+        let instruction = self.ip - 1; // todo this size depends on the last instruction size
+        eprintln!("[line {}] in script", self.chunk.lines[instruction]);
+        self.reset_stack();
+    }
+
+    fn reset_stack(&mut self) {
     }
 
     pub fn interpret(&mut self, source: &str) -> InterpretResult {
