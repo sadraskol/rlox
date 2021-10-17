@@ -1,6 +1,31 @@
 use std::convert::TryInto;
 
-pub type Value = f64;
+#[derive(Clone, Debug)]
+pub enum Value {
+    Nil,
+    Bool(bool),
+    Number(f64)
+}
+
+impl Value {
+    pub fn from_number(n: f64) -> Self {
+        Value::Number(n)
+    }
+    pub fn from_bool(b: bool) -> Self {
+        Value::Bool(b)
+    }
+    pub fn nil() -> Self {
+        Value::Nil
+    }
+
+    pub fn as_number(&self) -> f64 {
+        if let Value::Number(n) = self {
+            *n
+        } else {
+            panic!("not a number");
+        }
+    }
+}
 
 pub enum OpCode {
     OpReturn,
@@ -99,7 +124,7 @@ impl Chunk {
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
-                    "OP_CONSTANT    {} '{}'",
+                    "OP_CONSTANT    {} '{:?}'",
                     index, self.constants[index as usize]
                 );
                 return offset + 5;

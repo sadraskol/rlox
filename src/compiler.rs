@@ -164,7 +164,7 @@ impl<'a> Parser<'a> {
 
     fn number(&mut self) {
         let v = f64::from_str(self.previous.lexeme).unwrap();
-        self.emit_constant(v);
+        self.emit_constant(Value::from_number(v));
     }
 
     fn grouping(&mut self) {
@@ -411,6 +411,9 @@ impl<'a> Scanner<'a> {
 
     fn skip_whitespace(&mut self) {
         loop {
+            if self.is_at_end() {
+                return;
+            }
             let c = self.peek();
             if c.is_whitespace() {
                 if c == '\n' {
