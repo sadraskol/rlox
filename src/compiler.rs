@@ -19,6 +19,7 @@ enum Prefix {
     Unary,
     Number,
     Literal,
+    String,
 }
 
 enum Infix {
@@ -60,7 +61,7 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::Less => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
         TokenType::LessEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
         TokenType::Identifier => Rule::init(Prefix::None, Infix::None, Precedence::None),
-        TokenType::String => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::String => Rule::init(Prefix::String, Infix::None, Precedence::None),
         TokenType::Number => Rule::init(Prefix::Number, Infix::None, Precedence::None),
         TokenType::And => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Class => Rule::init(Prefix::None, Infix::None, Precedence::None),
@@ -154,6 +155,7 @@ impl<'a> Parser<'a> {
             Prefix::Grouping => self.grouping(),
             Prefix::Unary => self.unary(),
             Prefix::Number => self.number(),
+            Prefix::String => self.string(),
         }
         while prec <= get_rule(&self.current.kind).precedence {
             self.advance();
@@ -162,6 +164,10 @@ impl<'a> Parser<'a> {
                 Infix::Binary => self.binary(),
             }
         }
+    }
+
+    fn string(&mut self) {
+        self.emit_constant(Value::string(self.previous.lexeme.clone()));
     }
 
     fn literal(&mut self) {

@@ -1,10 +1,19 @@
 use std::convert::TryInto;
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum Object {
+    Str {
+        length: usize,
+        chars: Vec<char>
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Nil,
     Bool(bool),
-    Number(f64)
+    Number(f64),
+    Obj(Box<Object>),
 }
 
 impl Value {
@@ -14,10 +23,28 @@ impl Value {
     pub fn from_bool(b: bool) -> Self {
         Value::Bool(b)
     }
+    pub fn string(s: &str) -> Self {
+        let string = Object::Str {
+            length: s.len(),
+            chars: s.chars().collect(),
+        };
+        Value::Obj(Box::new(string))
+    }
     pub fn nil() -> Self {
         Value::Nil
     }
 
+    pub fn is_string(&self) -> bool {
+        if let Value::Obj(o) = self {
+            if let Object::Str {..} = **o {
+                true 
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
     pub fn is_bool(&self) -> bool {
         if let Value::Bool(_) = self {
             true 

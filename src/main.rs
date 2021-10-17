@@ -65,13 +65,16 @@ impl VM {
                     self.push(Value::from_number(a.as_number() / b.as_number()));
                 }
                 OpCode::OpAdd => {
-                    if !self.peek(0).is_number() || !self.peek(0).is_number() {
-                        self.runtime_error("Operands must be numbers.");
+                    if self.peek(0).is_string() && self.peek(1).is_string() {
+                        self.concatenate();
+                    } else if self.peek(0).is_number() && self.peek(0).is_number() {
+                        let b = self.pop();
+                        let a = self.pop();
+                        self.push(Value::from_number(a.as_number() + b.as_number()));
+                    } else {
+                        self.runtime_error("Operands must be two numbers or two strings.");
                         return InterpretResult::RuntimeError;
                     }
-                    let b = self.pop();
-                    let a = self.pop();
-                    self.push(Value::from_number(a.as_number() + b.as_number()));
                 }
                 OpCode::OpNegate => {
                     if !self.peek(0).is_number() {
@@ -132,6 +135,11 @@ impl VM {
                 }
             }
         }
+    }
+
+    fn concatenate(&self) {
+        let b = self.pop().as_str();
+        let a = self.pop().as_str();
     }
 
     fn peek(&self, depth: usize) -> &Value {
