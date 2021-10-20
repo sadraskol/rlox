@@ -167,7 +167,8 @@ impl<'a> Parser<'a> {
     }
 
     fn string(&mut self) {
-        self.emit_constant(Value::string(self.previous.lexeme.clone()));
+        let s = self.previous.lexeme;
+        self.emit_constant(Value::string(&s[1..s.len() - 1]));
     }
 
     fn literal(&mut self) {

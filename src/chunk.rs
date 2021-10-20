@@ -3,8 +3,15 @@ use std::convert::TryInto;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     Str {
-        length: usize,
-        chars: Vec<char>
+        s: String
+    }
+}
+
+impl std::fmt::Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::Str {s} => f.write_str(s),
+        }
     }
 }
 
@@ -16,6 +23,19 @@ pub enum Value {
     Obj(Box<Object>),
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Nil => f.write_str("nil"),
+            Value::Bool(true) => f.write_str("true"),
+            Value::Bool(false) => f.write_str("false"),
+            Value::Number(n) => n.fmt(f),
+            Value::Obj(obj) => obj.fmt(f),
+        }
+        
+    }
+}
+
 impl Value {
     pub fn from_number(n: f64) -> Self {
         Value::Number(n)
@@ -25,8 +45,7 @@ impl Value {
     }
     pub fn string(s: &str) -> Self {
         let string = Object::Str {
-            length: s.len(),
-            chars: s.chars().collect(),
+            s: s.to_string(),
         };
         Value::Obj(Box::new(string))
     }
@@ -76,6 +95,18 @@ impl Value {
             *b
         } else {
             panic!("not a bool");
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        if let Value::Obj(b) = self {
+            if let Object::Str { s } = &**b {
+                &s
+            } else {
+                panic!("not a string");
+            }
+        } else {
+            panic!("not an obj");
         }
     }
 

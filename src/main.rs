@@ -44,7 +44,7 @@ impl VM {
             self.ip += 1;
             match instruction.into() {
                 OpCode::OpReturn => {
-                    println!("'{:?}'", self.pop());
+                    println!("'{}'", self.pop());
                     return InterpretResult::Ok;
                 }
                 OpCode::OpConstant => {
@@ -137,9 +137,13 @@ impl VM {
         }
     }
 
-    fn concatenate(&self) {
-        let b = self.pop().as_str();
-        let a = self.pop().as_str();
+    fn concatenate(&mut self) {
+        let b = self.pop();
+        let a = self.pop();
+
+        let mut buf: String = a.as_str().to_string();
+        buf.push_str(&b.as_str());
+        self.push(Value::string(&buf));
     }
 
     fn peek(&self, depth: usize) -> &Value {
@@ -154,19 +158,6 @@ impl VM {
     }
 
     fn reset_stack(&mut self) {
-    }
-
-    pub fn interpret(&mut self, source: &str) -> InterpretResult {
-        let mut compiler = Parser::init(source);
-        let chunk = compiler.compile();
-
-        if let Some(chunk) = chunk {
-            self.chunk = chunk;
-            self.ip = 0;
-            self.run()
-        } else {
-            InterpretResult::CompileError
-        }
     }
 }
 
