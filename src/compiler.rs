@@ -1,8 +1,7 @@
-use crate::chunk::Value;
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
+use crate::chunk::Value;
 use std::str::FromStr;
-
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -35,7 +34,11 @@ struct Rule {
 
 impl Rule {
     fn init(prefix: Prefix, infix: Infix, precedence: Precedence) -> Self {
-        Rule {prefix, infix, precedence}
+        Rule {
+            prefix,
+            infix,
+            precedence,
+        }
     }
 }
 
@@ -141,7 +144,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) {
-        self.parse_precedence(Precedence::Assignment); 
+        self.parse_precedence(Precedence::Assignment);
     }
 
     fn parse_precedence(&mut self, prec: Precedence) {
@@ -263,13 +266,14 @@ impl<'a> Parser<'a> {
     }
 
     fn error_at(&mut self, at: &Token<'_>, msg: &str) {
-        if self.panic_mode { return }
+        if self.panic_mode {
+            return;
+        }
         self.panic_mode = true;
         eprint!("[line {}] Error", at.line);
         if at.kind == TokenType::Eof {
             eprint!(" at end");
         } else if at.kind == TokenType::Error {
-
         } else {
             eprint!(" at {}", at.lexeme);
         }
@@ -375,7 +379,7 @@ impl<'a> Scanner<'a> {
                         'a' => self.check_keyword(2, 3, "lse", TokenType::False),
                         'o' => self.check_keyword(2, 1, "r", TokenType::For),
                         'u' => self.check_keyword(2, 1, "n", TokenType::Fun),
-                        _ => TokenType::Identifier
+                        _ => TokenType::Identifier,
                     }
                 } else {
                     TokenType::Identifier
@@ -392,7 +396,7 @@ impl<'a> Scanner<'a> {
                     match self.source.chars().nth(self.start + 1).unwrap() {
                         'h' => self.check_keyword(2, 2, "is", TokenType::This),
                         'r' => self.check_keyword(2, 2, "ue", TokenType::True),
-                        _ => TokenType::Identifier
+                        _ => TokenType::Identifier,
                     }
                 } else {
                     TokenType::Identifier
@@ -400,12 +404,14 @@ impl<'a> Scanner<'a> {
             }
             'v' => self.check_keyword(1, 2, "ar", TokenType::Var),
             'w' => self.check_keyword(1, 4, "hile", TokenType::While),
-            _ => TokenType::Identifier
+            _ => TokenType::Identifier,
         }
     }
 
     fn check_keyword(&self, start: usize, length: usize, rest: &str, kind: TokenType) -> TokenType {
-        if self.current - self.start == start + length && rest == &self.source[self.start + start..self.start + start + length] {
+        if self.current - self.start == start + length
+            && rest == &self.source[self.start + start..self.start + start + length]
+        {
             kind
         } else {
             TokenType::Identifier

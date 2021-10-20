@@ -2,15 +2,13 @@ use std::convert::TryInto;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-    Str {
-        s: String
-    }
+    Str { s: String },
 }
 
 impl std::fmt::Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Object::Str {s} => f.write_str(s),
+            Object::Str { s } => f.write_str(s),
         }
     }
 }
@@ -32,7 +30,6 @@ impl std::fmt::Display for Value {
             Value::Number(n) => n.fmt(f),
             Value::Obj(obj) => obj.fmt(f),
         }
-        
     }
 }
 
@@ -44,9 +41,7 @@ impl Value {
         Value::Bool(b)
     }
     pub fn string(s: &str) -> Self {
-        let string = Object::Str {
-            s: s.to_string(),
-        };
+        let string = Object::Str { s: s.to_string() };
         Value::Obj(Box::new(string))
     }
     pub fn nil() -> Self {
@@ -55,8 +50,8 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         if let Value::Obj(o) = self {
-            if let Object::Str {..} = **o {
-                true 
+            if let Object::Str { .. } = **o {
+                true
             } else {
                 false
             }
@@ -66,7 +61,7 @@ impl Value {
     }
     pub fn is_bool(&self) -> bool {
         if let Value::Bool(_) = self {
-            true 
+            true
         } else {
             false
         }
@@ -76,7 +71,7 @@ impl Value {
     }
     pub fn is_number(&self) -> bool {
         if let Value::Number(_) = self {
-            true 
+            true
         } else {
             false
         }
@@ -109,7 +104,6 @@ impl Value {
             panic!("not an obj");
         }
     }
-
 }
 
 pub enum OpCode {
@@ -238,5 +232,4 @@ impl Chunk {
         }
         offset + 1
     }
-
 }

@@ -1,13 +1,12 @@
-use std::env::args;
-use std::convert::TryInto;
-use crate::compiler::Parser;
 use crate::chunk::Chunk;
-use crate::chunk::Value;
 use crate::chunk::OpCode;
+use crate::chunk::Value;
+use crate::compiler::Parser;
+use std::convert::TryInto;
+use std::env::args;
 
-
-mod compiler;
 mod chunk;
+mod compiler;
 
 struct VM {
     chunk: Chunk,
@@ -157,8 +156,7 @@ impl VM {
         self.reset_stack();
     }
 
-    fn reset_stack(&mut self) {
-    }
+    fn reset_stack(&mut self) {}
 }
 
 fn main() {
