@@ -108,8 +108,10 @@ impl<'a> Parser<'a> {
         self.chunk = Some(Chunk::new());
 
         self.advance();
-        self.expression();
-        self.consume(TokenType::Eof, "Expecct end of expression.");
+        while !self.matches(TokenType::Eof) {
+            self.declaration();
+        }
+        self.consume(TokenType::Eof, "Expect end of expression.");
         self.end_compiler();
 
         if self.had_error {
@@ -125,7 +127,16 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_return(&mut self) {
-        self.emit_byte(OpCode::OpReturn);
+        self.emit_byte(OpCode::Return);
+    }
+
+    fn matches(&mut self, kind: TokenType) -> bool {
+        if self.current.kind == kind {
+            self.advance();
+            true
+        } else {
+            false
+        }
     }
 
     fn advance(&mut self) {
@@ -138,6 +149,24 @@ impl<'a> Parser<'a> {
 
             self.error_at_current(self.current.lexeme);
         }
+    }
+
+    fn declaration(&mut self) {
+        self.statement();
+    }
+
+    fn statement(&mut self) {
+        if self.matches(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_byte(OpCode::Print);
     }
 
     fn expression(&mut self) {
@@ -167,7 +196,8 @@ impl<'a> Parser<'a> {
     }
 
     fn string(&mut self) {
-        self.emit_constant(Value::string(self.previous.lexeme.clone()));
+        let s = self.previous.lexeme;
+        self.emit_constant(Value::string(&s[1..s.len() - 1]));
     }
 
     fn literal(&mut self) {
@@ -195,8 +225,8 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Unary);
 
         match op_type {
-            TokenType::Minus => self.emit_byte(OpCode::OpNegate),
-            TokenType::Bang => self.emit_byte(OpCode::OpNot),
+            TokenType::Minus => self.emit_byte(OpCode::Negate),
+            TokenType::Bang => self.emit_byte(OpCode::Not),
             other => panic!("unknown unary operator: {:?}", other),
         }
     }
@@ -207,24 +237,24 @@ impl<'a> Parser<'a> {
         self.parse_precedence(rule.precedence.next());
 
         match op_type {
-            TokenType::Plus => self.emit_byte(OpCode::OpAdd),
-            TokenType::Minus => self.emit_byte(OpCode::OpSubstract),
-            TokenType::Star => self.emit_byte(OpCode::OpMultiply),
-            TokenType::Slash => self.emit_byte(OpCode::OpDivide),
+            TokenType::Plus => self.emit_byte(OpCode::Add),
+            TokenType::Minus => self.emit_byte(OpCode::Substract),
+            TokenType::Star => self.emit_byte(OpCode::Multiply),
+            TokenType::Slash => self.emit_byte(OpCode::Divide),
             TokenType::BangEqual => {
-                self.emit_byte(OpCode::OpEqual);
-                self.emit_byte(OpCode::OpNot);
+                self.emit_byte(OpCode::Equal);
+                self.emit_byte(OpCode::Not);
             }
-            TokenType::EqualEqual => self.emit_byte(OpCode::OpEqual),
-            TokenType::Less => self.emit_byte(OpCode::OpLess),
+            TokenType::EqualEqual => self.emit_byte(OpCode::Equal),
+            TokenType::Less => self.emit_byte(OpCode::Less),
             TokenType::LessEqual => {
-                self.emit_byte(OpCode::OpGreater);
-                self.emit_byte(OpCode::OpNot);
+                self.emit_byte(OpCode::Greater);
+                self.emit_byte(OpCode::Not);
             }
-            TokenType::Greater => self.emit_byte(OpCode::OpGreater),
+            TokenType::Greater => self.emit_byte(OpCode::Greater),
             TokenType::GreaterEqual => {
-                self.emit_byte(OpCode::OpLess);
-                self.emit_byte(OpCode::OpNot);
+                self.emit_byte(OpCode::Less);
+                self.emit_byte(OpCode::Not);
             }
             other => panic!("unknown binary operator: {:?}", other),
         }
@@ -234,7 +264,7 @@ impl<'a> Parser<'a> {
         let line = self.previous.line;
         let chunk = self.current_chunk();
         let i = chunk.add_constant(v);
-        chunk.write_chunk(OpCode::OpConstant, line);
+        chunk.write_chunk(OpCode::Constant, line);
         chunk.write_index(i, line);
     }
 

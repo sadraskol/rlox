@@ -43,11 +43,10 @@ impl VM {
             let instruction = self.chunk.code[self.ip];
             self.ip += 1;
             match instruction.into() {
-                OpCode::OpReturn => {
-                    println!("'{:?}'", self.pop());
+                OpCode::Return => {
                     return InterpretResult::Ok;
                 }
-                OpCode::OpConstant => {
+                OpCode::Constant => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
                     self.ip += 4;
                     let sized_bytes = bytes.try_into().unwrap();
@@ -55,7 +54,7 @@ impl VM {
                     let constant = &self.chunk.constants[index as usize];
                     self.stack.push(constant.clone());
                 }
-                OpCode::OpDivide => {
+                OpCode::Divide => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
                         self.runtime_error("Operands must be numbers.");
                         return InterpretResult::RuntimeError;
@@ -64,7 +63,7 @@ impl VM {
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() / b.as_number()));
                 }
-                OpCode::OpAdd => {
+                OpCode::Add => {
                     if self.peek(0).is_string() && self.peek(1).is_string() {
                         self.concatenate();
                     } else if self.peek(0).is_number() && self.peek(0).is_number() {
@@ -76,7 +75,7 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
-                OpCode::OpNegate => {
+                OpCode::Negate => {
                     if !self.peek(0).is_number() {
                         self.runtime_error("Operand must be a number.");
                         return InterpretResult::RuntimeError;
@@ -84,7 +83,7 @@ impl VM {
                     let neg = self.pop();
                     self.push(Value::from_number(-neg.as_number()));
                 }
-                OpCode::OpMultiply => {
+                OpCode::Multiply => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
                         self.runtime_error("Operands must be numbers.");
                         return InterpretResult::RuntimeError;
@@ -93,7 +92,7 @@ impl VM {
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() * b.as_number()));
                 }
-                OpCode::OpSubstract => {
+                OpCode::Substract => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
                         self.runtime_error("Operands must be numbers.");
                         return InterpretResult::RuntimeError;
@@ -102,7 +101,7 @@ impl VM {
                     let a = self.pop();
                     self.push(Value::from_number(a.as_number() - b.as_number()));
                 }
-                OpCode::OpNot => {
+                OpCode::Not => {
                     if !self.peek(0).is_bool() {
                         self.runtime_error("Operand must be a bool.");
                         return InterpretResult::RuntimeError;
@@ -110,12 +109,12 @@ impl VM {
                     let b = self.pop();
                     self.push(Value::from_bool(!b.as_bool()));
                 }
-                OpCode::OpEqual => {
+                OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
                     self.push(Value::from_bool(a == b));
                 }
-                OpCode::OpLess => {
+                OpCode::Less => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
                         self.runtime_error("Operands must be numbers.");
                         return InterpretResult::RuntimeError;
@@ -124,7 +123,7 @@ impl VM {
                     let a = self.pop();
                     self.push(Value::from_bool(a.as_number() < b.as_number()));
                 }
-                OpCode::OpGreater => {
+                OpCode::Greater => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
                         self.runtime_error("Operands must be numbers.");
                         return InterpretResult::RuntimeError;
@@ -133,13 +132,18 @@ impl VM {
                     let a = self.pop();
                     self.push(Value::from_bool(a.as_number() > b.as_number()));
                 }
+                OpCode::Print => {
+                    println!("{}", self.pop().as_str());
+                }
             }
         }
     }
 
-    fn concatenate(&self) {
-        let b = self.pop().as_str();
-        let a = self.pop().as_str();
+    fn concatenate(&mut self) {
+        let b = self.pop();
+        let mut a = self.pop().as_str().to_string();
+        a.push_str(b.as_str());
+        self.push(Value::string(&a));
     }
 
     fn peek(&self, depth: usize) -> &Value {

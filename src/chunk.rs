@@ -3,8 +3,14 @@ use std::convert::TryInto;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     Str {
-        length: usize,
-        chars: Vec<char>
+        s: String,
+    }
+}
+
+impl Object {
+    pub fn print(&self) -> String {
+        let Object::Str {s} = self;
+        s.to_string()
     }
 }
 
@@ -25,8 +31,7 @@ impl Value {
     }
     pub fn string(s: &str) -> Self {
         let string = Object::Str {
-            length: s.len(),
-            chars: s.chars().collect(),
+            s: s.to_string()
         };
         Value::Obj(Box::new(string))
     }
@@ -36,7 +41,7 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         if let Value::Obj(o) = self {
-            if let Object::Str {..} = **o {
+            if let Object::Str {..} = &**o {
                 true 
             } else {
                 false
@@ -79,36 +84,62 @@ impl Value {
         }
     }
 
+    pub fn as_str(&self) -> &str {
+        if let Value::Obj(o) = self {
+            if let Object::Str {s} = &**o {
+                &s
+            } else {
+                panic!("not a string");
+            }
+        } else {
+            panic!("not an object");
+        }
+    }
+
+    pub fn print(&self) -> String {
+        use std::fmt::Write;
+        match self {
+            Value::Nil => "nil".to_string(),
+            Value::Bool(true) => "true".to_string(),
+            Value::Bool(false) => "false".to_string(),
+            Value::Number(f) => {
+                f.to_string()
+            },
+            Value::Obj(o) => o.print(),
+        }
+    }
 }
 
 pub enum OpCode {
-    OpReturn,
-    OpConstant,
-    OpDivide,
-    OpAdd,
-    OpNegate,
-    OpMultiply,
-    OpSubstract,
-    OpNot,
-    OpEqual,
-    OpGreater,
-    OpLess,
+    Return,
+    Constant,
+    Divide,
+    Add,
+    Negate,
+    Multiply,
+    Substract,
+    Not,
+    Equal,
+    Greater,
+    Less,
+    Print,
 }
 
 impl From<u8> for OpCode {
     fn from(b: u8) -> Self {
         match b {
-            0 => OpCode::OpReturn,
-            1 => OpCode::OpConstant,
-            2 => OpCode::OpDivide,
-            3 => OpCode::OpAdd,
-            4 => OpCode::OpNegate,
-            5 => OpCode::OpMultiply,
-            6 => OpCode::OpSubstract,
-            7 => OpCode::OpNot,
-            8 => OpCode::OpEqual,
-            9 => OpCode::OpGreater,
-            10 => OpCode::OpLess,
+            0 => OpCode::Return,
+            1 => OpCode::Constant,
+            2 => OpCode::Divide,
+            3 => OpCode::Add,
+            4 => OpCode::Negate,
+            5 => OpCode::Multiply,
+            6 => OpCode::Substract,
+            7 => OpCode::Not,
+            8 => OpCode::Equal,
+            9 => OpCode::Greater,
+            10 => OpCode::Less,
+            11 => OpCode::Print,
             _ => panic!("unexpected op code"),
         }
     }
@@ -117,17 +148,18 @@ impl From<u8> for OpCode {
 impl From<OpCode> for u8 {
     fn from(b: OpCode) -> Self {
         match b {
-            OpCode::OpReturn => 0,
-            OpCode::OpConstant => 1,
-            OpCode::OpDivide => 2,
-            OpCode::OpAdd => 3,
-            OpCode::OpNegate => 4,
-            OpCode::OpMultiply => 5,
-            OpCode::OpSubstract => 6,
-            OpCode::OpNot => 7,
-            OpCode::OpEqual => 8,
-            OpCode::OpGreater => 9,
-            OpCode::OpLess => 10,
+            OpCode::Return => 0,
+            OpCode::Constant => 1,
+            OpCode::Divide => 2,
+            OpCode::Add => 3,
+            OpCode::Negate => 4,
+            OpCode::Multiply => 5,
+            OpCode::Substract => 6,
+            OpCode::Not => 7,
+            OpCode::Equal => 8,
+            OpCode::Greater => 9,
+            OpCode::Less => 10,
+            OpCode::Print => 11,
         }
     }
 }
@@ -184,8 +216,8 @@ impl Chunk {
             print!("{:4} ", self.lines[offset]);
         }
         match self.code[offset].into() {
-            OpCode::OpReturn => println!("OP_RETURN"),
-            OpCode::OpConstant => {
+            OpCode::Return => println!("OP_RETURN"),
+            OpCode::Constant => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
@@ -195,15 +227,16 @@ impl Chunk {
                 );
                 return offset + 5;
             }
-            OpCode::OpDivide => println!("OP_DIVIDE"),
-            OpCode::OpAdd => println!("OP_ADD"),
-            OpCode::OpNegate => println!("OP_NEGATE"),
-            OpCode::OpMultiply => println!("OP_MULTIPLY"),
-            OpCode::OpSubstract => println!("OP_SUBSTRACT"),
-            OpCode::OpNot => println!("OP_NOT"),
-            OpCode::OpEqual => println!("OP_EQUAL"),
-            OpCode::OpGreater => println!("OP_GREATER"),
-            OpCode::OpLess => println!("OP_LESS"),
+            OpCode::Divide => println!("OP_DIVIDE"),
+            OpCode::Add => println!("OP_ADD"),
+            OpCode::Negate => println!("OP_NEGATE"),
+            OpCode::Multiply => println!("OP_MULTIPLY"),
+            OpCode::Substract => println!("OP_SUBSTRACT"),
+            OpCode::Not => println!("OP_NOT"),
+            OpCode::Equal => println!("OP_EQUAL"),
+            OpCode::Greater => println!("OP_GREATER"),
+            OpCode::Less => println!("OP_LESS"),
+            OpCode::Print => println!("OP_PRINT"),
         }
         offset + 1
     }
