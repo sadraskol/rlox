@@ -1,8 +1,7 @@
-use crate::chunk::Value;
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
+use crate::chunk::Value;
 use std::str::FromStr;
-
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -15,6 +14,7 @@ pub struct Parser<'a> {
 
 enum Prefix {
     None,
+    Variable,
     Grouping,
     Unary,
     Number,
@@ -35,7 +35,11 @@ struct Rule {
 
 impl Rule {
     fn init(prefix: Prefix, infix: Infix, precedence: Precedence) -> Self {
-        Rule {prefix, infix, precedence}
+        Rule {
+            prefix,
+            infix,
+            precedence,
+        }
     }
 }
 
@@ -60,7 +64,7 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::GreaterEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
         TokenType::Less => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
         TokenType::LessEqual => Rule::init(Prefix::None, Infix::Binary, Precedence::Comparison),
-        TokenType::Identifier => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Identifier => Rule::init(Prefix::Variable, Infix::None, Precedence::None),
         TokenType::String => Rule::init(Prefix::String, Infix::None, Precedence::None),
         TokenType::Number => Rule::init(Prefix::Number, Infix::None, Precedence::None),
         TokenType::And => Rule::init(Prefix::None, Infix::None, Precedence::None),
@@ -152,15 +156,83 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) {
-        self.statement();
+        if self.matches(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
+
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while self.current.kind != TokenType::Eof {
+            if self.previous.kind == TokenType::Semicolon {
+                return;
+            }
+            match self.current.kind {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Var
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
+        if self.matches(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_byte(OpCode::Nil);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        );
+
+        self.define_global(global);
+    }
+
+    fn parse_variable(&mut self, msg: &str) -> u32 {
+        self.consume(TokenType::Identifier, msg);
+        self.identifier_constant(&self.previous.lexeme)
+    }
+
+    fn identifier_constant(&mut self, token: &str) -> u32 {
+        let chunk = self.current_chunk();
+        chunk.add_constant(Value::string(token))
+    }
+
+    fn define_global(&mut self, i: u32) {
+        let line = self.previous.line;
+        let chunk = self.current_chunk();
+        chunk.write_index(i, line);
+        self.emit_byte(OpCode::DefineGlobal);
     }
 
     fn statement(&mut self) {
         if self.matches(TokenType::Print) {
             self.print_statement();
         } else {
-            self.expression();
+            self.expression_statement();
         }
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_byte(OpCode::Pop);
     }
 
     fn print_statement(&mut self) {
@@ -170,7 +242,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) {
-        self.parse_precedence(Precedence::Assignment); 
+        self.parse_precedence(Precedence::Assignment);
     }
 
     fn parse_precedence(&mut self, prec: Precedence) {
@@ -180,6 +252,7 @@ impl<'a> Parser<'a> {
                 self.error_at_current("Expect expression.");
                 return;
             }
+            Prefix::Variable => self.variable(),
             Prefix::Literal => self.literal(),
             Prefix::Grouping => self.grouping(),
             Prefix::Unary => self.unary(),
@@ -198,6 +271,14 @@ impl<'a> Parser<'a> {
     fn string(&mut self) {
         let s = self.previous.lexeme;
         self.emit_constant(Value::string(&s[1..s.len() - 1]));
+    }
+
+    fn variable(&mut self) {
+        let i = self.identifier_constant(self.previous.lexeme);
+        let line = self.previous.line;
+        let chunk = self.current_chunk();
+        chunk.write_index(i, line);
+        self.emit_byte(OpCode::GetGlobal);
     }
 
     fn literal(&mut self) {
@@ -292,13 +373,14 @@ impl<'a> Parser<'a> {
     }
 
     fn error_at(&mut self, at: &Token<'_>, msg: &str) {
-        if self.panic_mode { return }
+        if self.panic_mode {
+            return;
+        }
         self.panic_mode = true;
         eprint!("[line {}] Error", at.line);
         if at.kind == TokenType::Eof {
             eprint!(" at end");
         } else if at.kind == TokenType::Error {
-
         } else {
             eprint!(" at {}", at.lexeme);
         }
@@ -404,7 +486,7 @@ impl<'a> Scanner<'a> {
                         'a' => self.check_keyword(2, 3, "lse", TokenType::False),
                         'o' => self.check_keyword(2, 1, "r", TokenType::For),
                         'u' => self.check_keyword(2, 1, "n", TokenType::Fun),
-                        _ => TokenType::Identifier
+                        _ => TokenType::Identifier,
                     }
                 } else {
                     TokenType::Identifier
@@ -421,7 +503,7 @@ impl<'a> Scanner<'a> {
                     match self.source.chars().nth(self.start + 1).unwrap() {
                         'h' => self.check_keyword(2, 2, "is", TokenType::This),
                         'r' => self.check_keyword(2, 2, "ue", TokenType::True),
-                        _ => TokenType::Identifier
+                        _ => TokenType::Identifier,
                     }
                 } else {
                     TokenType::Identifier
@@ -429,12 +511,14 @@ impl<'a> Scanner<'a> {
             }
             'v' => self.check_keyword(1, 2, "ar", TokenType::Var),
             'w' => self.check_keyword(1, 4, "hile", TokenType::While),
-            _ => TokenType::Identifier
+            _ => TokenType::Identifier,
         }
     }
 
     fn check_keyword(&self, start: usize, length: usize, rest: &str, kind: TokenType) -> TokenType {
-        if self.current - self.start == start + length && rest == &self.source[self.start + start..self.start + start + length] {
+        if self.current - self.start == start + length
+            && rest == &self.source[self.start + start..self.start + start + length]
+        {
             kind
         } else {
             TokenType::Identifier

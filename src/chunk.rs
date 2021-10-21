@@ -2,14 +2,12 @@ use std::convert::TryInto;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-    Str {
-        s: String,
-    }
+    Str { s: String },
 }
 
 impl Object {
     pub fn print(&self) -> String {
-        let Object::Str {s} = self;
+        let Object::Str { s } = self;
         s.to_string()
     }
 }
@@ -30,9 +28,7 @@ impl Value {
         Value::Bool(b)
     }
     pub fn string(s: &str) -> Self {
-        let string = Object::Str {
-            s: s.to_string()
-        };
+        let string = Object::Str { s: s.to_string() };
         Value::Obj(Box::new(string))
     }
     pub fn nil() -> Self {
@@ -41,8 +37,8 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         if let Value::Obj(o) = self {
-            if let Object::Str {..} = &**o {
-                true 
+            if let Object::Str { .. } = &**o {
+                true
             } else {
                 false
             }
@@ -52,7 +48,7 @@ impl Value {
     }
     pub fn is_bool(&self) -> bool {
         if let Value::Bool(_) = self {
-            true 
+            true
         } else {
             false
         }
@@ -62,7 +58,7 @@ impl Value {
     }
     pub fn is_number(&self) -> bool {
         if let Value::Number(_) = self {
-            true 
+            true
         } else {
             false
         }
@@ -86,7 +82,7 @@ impl Value {
 
     pub fn as_str(&self) -> &str {
         if let Value::Obj(o) = self {
-            if let Object::Str {s} = &**o {
+            if let Object::Str { s } = &**o {
                 &s
             } else {
                 panic!("not a string");
@@ -97,14 +93,11 @@ impl Value {
     }
 
     pub fn print(&self) -> String {
-        use std::fmt::Write;
         match self {
             Value::Nil => "nil".to_string(),
             Value::Bool(true) => "true".to_string(),
             Value::Bool(false) => "false".to_string(),
-            Value::Number(f) => {
-                f.to_string()
-            },
+            Value::Number(f) => f.to_string(),
             Value::Obj(o) => o.print(),
         }
     }
@@ -123,6 +116,10 @@ pub enum OpCode {
     Greater,
     Less,
     Print,
+    Nil,
+    Pop,
+    DefineGlobal,
+    GetGlobal,
 }
 
 impl From<u8> for OpCode {
@@ -140,6 +137,10 @@ impl From<u8> for OpCode {
             9 => OpCode::Greater,
             10 => OpCode::Less,
             11 => OpCode::Print,
+            12 => OpCode::Nil,
+            13 => OpCode::Pop,
+            14 => OpCode::DefineGlobal,
+            15 => OpCode::GetGlobal,
             _ => panic!("unexpected op code"),
         }
     }
@@ -160,6 +161,10 @@ impl From<OpCode> for u8 {
             OpCode::Greater => 9,
             OpCode::Less => 10,
             OpCode::Print => 11,
+            OpCode::Nil => 12,
+            OpCode::Pop => 13,
+            OpCode::DefineGlobal => 14,
+            OpCode::GetGlobal => 15,
         }
     }
 }
@@ -237,8 +242,11 @@ impl Chunk {
             OpCode::Greater => println!("OP_GREATER"),
             OpCode::Less => println!("OP_LESS"),
             OpCode::Print => println!("OP_PRINT"),
+            OpCode::Nil => println!("OP_NIL"),
+            OpCode::Pop => println!("OP_POP"),
+            OpCode::DefineGlobal => println!("OP_DEFINE_GLOBAL"),
+            OpCode::GetGlobal => println!("OP_GET_GLOBAL"),
         }
         offset + 1
     }
-
 }

@@ -1,2 +1,2 @@
-// var msg = "su" + "per";
-print "su" + "per";
+var msg = "su" + "per";
+print msg;

@@ -1,18 +1,19 @@
-use std::env::args;
-use std::convert::TryInto;
-use crate::compiler::Parser;
 use crate::chunk::Chunk;
-use crate::chunk::Value;
 use crate::chunk::OpCode;
+use crate::chunk::Value;
+use crate::compiler::Parser;
+use std::convert::TryInto;
+use std::env::args;
+use std::collections::HashMap;
 
-
-mod compiler;
 mod chunk;
+mod compiler;
 
 struct VM {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
 }
 
 enum InterpretResult {
@@ -27,6 +28,7 @@ impl VM {
             chunk,
             ip: 0,
             stack: vec![],
+            globals: HashMap::new(),
         }
     }
 
@@ -135,6 +137,26 @@ impl VM {
                 OpCode::Print => {
                     println!("{}", self.pop().as_str());
                 }
+                OpCode::Nil => {
+                    self.push(Value::Nil);
+                }
+                OpCode::Pop => {
+                    self.pop();
+                }
+                OpCode::DefineGlobal => {
+                    let key = self.pop().as_str().to_string();
+                    let value = self.pop();
+                    self.globals.insert(key, value);
+                }
+                OpCode::GetGlobal => {
+                    let name = self.pop().as_str().to_string();
+                    if let Some(v) = self.globals.get(&name) {
+                        self.push(v.clone());
+                    } else {
+                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        return InterpretResult::RuntimeError;
+                    }
+                }
             }
         }
     }
@@ -157,8 +179,7 @@ impl VM {
         self.reset_stack();
     }
 
-    fn reset_stack(&mut self) {
-    }
+    fn reset_stack(&mut self) {}
 
     pub fn interpret(&mut self, source: &str) -> InterpretResult {
         let mut compiler = Parser::init(source);
@@ -198,6 +219,7 @@ fn run_file(f_name: String) {
             chunk,
             ip: 0,
             stack: vec![],
+            globals: HashMap::new(),
         };
         vm.run();
     } else {
