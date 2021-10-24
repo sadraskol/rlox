@@ -227,7 +227,7 @@ impl Chunk {
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
-                    "OP_CONSTANT    {} '{:?}'",
+                    "OP_CONSTANT      {} '{:?}'",
                     index, self.constants[index as usize]
                 );
                 return offset + 5;
@@ -244,8 +244,26 @@ impl Chunk {
             OpCode::Print => println!("OP_PRINT"),
             OpCode::Nil => println!("OP_NIL"),
             OpCode::Pop => println!("OP_POP"),
-            OpCode::DefineGlobal => println!("OP_DEFINE_GLOBAL"),
-            OpCode::GetGlobal => println!("OP_GET_GLOBAL"),
+            OpCode::DefineGlobal => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!(
+                    "OP_DEFINE_GLOBAL {} '{:?}'",
+                    index, self.constants[index as usize]
+                );
+                return offset + 5;
+            },
+            OpCode::GetGlobal => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!(
+                    "OP_GET_GLOBAL    {} '{:?}'",
+                    index, self.constants[index as usize]
+                );
+                return offset + 5;
+            }
         }
         offset + 1
     }

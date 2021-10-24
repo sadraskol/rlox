@@ -144,16 +144,24 @@ impl VM {
                     self.pop();
                 }
                 OpCode::DefineGlobal => {
-                    let key = self.pop().as_str().to_string();
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let index = u32::from_be_bytes(sized_bytes);
+                    let key = self.chunk.constants[index as usize].as_str().to_string();
                     let value = self.pop();
                     self.globals.insert(key, value);
                 }
                 OpCode::GetGlobal => {
-                    let name = self.pop().as_str().to_string();
-                    if let Some(v) = self.globals.get(&name) {
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let index = u32::from_be_bytes(sized_bytes);
+                    let key = &self.chunk.constants[index as usize];
+                    if let Some(v) = self.globals.get(key.as_str()) {
                         self.push(v.clone());
                     } else {
-                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        self.runtime_error(&format!("Undefined variable '{}'.", key.as_str()));
                         return InterpretResult::RuntimeError;
                     }
                 }

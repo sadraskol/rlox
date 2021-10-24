@@ -215,10 +215,10 @@ impl<'a> Parser<'a> {
     }
 
     fn define_global(&mut self, i: u32) {
+        self.emit_byte(OpCode::DefineGlobal);
         let line = self.previous.line;
         let chunk = self.current_chunk();
         chunk.write_index(i, line);
-        self.emit_byte(OpCode::DefineGlobal);
     }
 
     fn statement(&mut self) {
@@ -274,11 +274,11 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self) {
+        self.emit_byte(OpCode::GetGlobal);
         let i = self.identifier_constant(self.previous.lexeme);
         let line = self.previous.line;
         let chunk = self.current_chunk();
         chunk.write_index(i, line);
-        self.emit_byte(OpCode::GetGlobal);
     }
 
     fn literal(&mut self) {
