@@ -120,6 +120,7 @@ pub enum OpCode {
     Pop,
     DefineGlobal,
     GetGlobal,
+    SetGlobal,
 }
 
 impl From<u8> for OpCode {
@@ -141,6 +142,7 @@ impl From<u8> for OpCode {
             13 => OpCode::Pop,
             14 => OpCode::DefineGlobal,
             15 => OpCode::GetGlobal,
+            16 => OpCode::SetGlobal,
             _ => panic!("unexpected op code"),
         }
     }
@@ -165,6 +167,7 @@ impl From<OpCode> for u8 {
             OpCode::Pop => 13,
             OpCode::DefineGlobal => 14,
             OpCode::GetGlobal => 15,
+            OpCode::SetGlobal => 16,
         }
     }
 }
@@ -260,6 +263,16 @@ impl Chunk {
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
                     "OP_GET_GLOBAL    {} '{:?}'",
+                    index, self.constants[index as usize]
+                );
+                return offset + 5;
+            }
+            OpCode::SetGlobal => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!(
+                    "OP_SET_GLOBAL    {} '{:?}'",
                     index, self.constants[index as usize]
                 );
                 return offset + 5;

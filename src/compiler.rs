@@ -247,24 +247,31 @@ impl<'a> Parser<'a> {
 
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
+        let can_assign = prec <= Precedence::Assignment;
         match get_rule(&self.previous.kind).prefix {
             Prefix::None => {
                 self.error_at_current("Expect expression.");
                 return;
             }
-            Prefix::Variable => self.variable(),
+            Prefix::Variable => self.variable(can_assign),
             Prefix::Literal => self.literal(),
             Prefix::Grouping => self.grouping(),
             Prefix::Unary => self.unary(),
             Prefix::Number => self.number(),
             Prefix::String => self.string(),
         }
+
+
         while prec <= get_rule(&self.current.kind).precedence {
             self.advance();
             match get_rule(&self.previous.kind).infix {
                 Infix::None => {}
                 Infix::Binary => self.binary(),
             }
+        }
+
+        if can_assign && self.matches(TokenType::Equal) {
+            self.error_at_current("Invalid assigment target.");
         }
     }
 
@@ -273,10 +280,15 @@ impl<'a> Parser<'a> {
         self.emit_constant(Value::string(&s[1..s.len() - 1]));
     }
 
-    fn variable(&mut self) {
-        self.emit_byte(OpCode::GetGlobal);
+    fn variable(&mut self, can_assign: bool) {
         let i = self.identifier_constant(self.previous.lexeme);
         let line = self.previous.line;
+        if can_assign && self.matches(TokenType::Equal) {
+            self.expression();
+            self.emit_byte(OpCode::SetGlobal);
+        } else {
+            self.emit_byte(OpCode::GetGlobal);
+        }
         let chunk = self.current_chunk();
         chunk.write_index(i, line);
     }

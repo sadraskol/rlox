@@ -165,6 +165,20 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                OpCode::SetGlobal => {
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let index = u32::from_be_bytes(sized_bytes);
+                    let key = self.chunk.constants[index as usize].as_str().to_string();
+                    let value = self.peek(0); // todo use peek instead of pop: the value remains on the stack
+                    if self.globals.get(key.as_str()).is_some() {
+                        self.globals.insert(key, value.clone());
+                    } else {
+                        self.runtime_error(&format!("Undefined variable '{}'.", key.as_str()));
+                        return InterpretResult::RuntimeError;
+                    }
+                }
             }
         }
     }
