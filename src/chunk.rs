@@ -20,6 +20,18 @@ pub enum Value {
     Obj(Box<Object>),
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Nil => f.write_str("nil"),
+            Value::Bool(true) => f.write_str("true"),
+            Value::Bool(false) => f.write_str("false"),
+            Value::Number(n) => n.fmt(f),
+            Value::Obj(obj) => obj.fmt(f),
+        }
+    }
+}
+
 impl Value {
     pub fn from_number(n: f64) -> Self {
         Value::Number(n)
