@@ -260,6 +260,10 @@ impl<'a> Parser<'a> {
         } else {
             self.emit_byte(OpCode::Nil);
         }
+
+        let last = self.compiler.locals.last_mut().unwrap();
+        last.depth = Some(self.compiler.scope_depth);
+
         self.consume(
             TokenType::Semicolon,
             "Expect ';' after variable declaration.",
@@ -364,7 +368,7 @@ impl<'a> Parser<'a> {
             if can_assign && self.matches(TokenType::Equal) {
                 self.expression();
                 self.emit_byte(OpCode::SetLocal);
-                let last = self.compiler.locals.first_mut().unwrap();
+                let last = self.compiler.locals.last_mut().unwrap();
                 last.depth = Some(self.compiler.scope_depth);
             } else {
                 self.emit_byte(OpCode::GetLocal);
@@ -377,7 +381,6 @@ impl<'a> Parser<'a> {
     }
 
     fn resolve_local(&mut self, name: &str) -> Option<u32> {
-        println!("search for {}, in {:?}", name, self.compiler.locals);
         for (i, local) in self.compiler.locals.iter().enumerate().rev() {
             if name == local.token.lexeme {
                 if local.depth.is_none() {
