@@ -3,8 +3,71 @@ use crate::chunk::OpCode;
 use crate::chunk::Value;
 use std::str::FromStr;
 
+#[derive(Clone, Copy, Debug)]
+struct Local<'a> {
+    token: Token<'a>,
+    depth: Option<usize>,
+}
+
+struct Compiler<'a> {
+    locals: Vec<Local<'a>>,
+    scope_depth: usize,
+}
+
+impl<'a> Compiler<'a> {
+    fn new() -> Self {
+        Compiler {
+            locals: vec![],
+            scope_depth: 0,
+        }
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth = self.scope_depth + 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth = self.scope_depth - 1;
+    }
+
+    fn variable_already_declared(&self, token: &Token<'a>) -> bool {
+        for local in self.locals.iter().rev() {
+            if local.token.lexeme == token.lexeme && local.depth == Some(self.scope_depth) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn add_local(&mut self, token: Token<'a>) {
+        self.locals.push(Local {
+            token,
+            depth: None,
+        })
+    }
+
+    fn locals_removed_from_stack(&mut self) -> usize {
+        let mut locals_off_the_stack = 0;
+        let mut new_locals = vec![];
+        for l in self.locals.drain(..) {
+            if let Some(d) = l.depth {
+                if d <= self.scope_depth {
+                    new_locals.push(l);
+                } else {
+                }
+                locals_off_the_stack += 1;
+            } else {
+                new_locals.push(l);
+            }
+        }
+        self.locals = new_locals;
+        locals_off_the_stack
+    }
+}
+
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
+    compiler: Compiler<'a>,
     previous: Token<'a>,
     current: Token<'a>,
     chunk: Option<Chunk>,
@@ -92,6 +155,7 @@ impl<'a> Parser<'a> {
     pub fn init(source: &'a str) -> Self {
         Parser {
             scanner: Scanner::init(source),
+            compiler: Compiler::new(),
             previous: Token {
                 kind: TokenType::Error,
                 lexeme: "before file",
@@ -190,7 +254,7 @@ impl<'a> Parser<'a> {
     }
 
     fn var_declaration(&mut self) {
-        let global = self.parse_variable("Expect variable name.");
+        self.parse_variable("Expect variable name.");
         if self.matches(TokenType::Equal) {
             self.expression();
         } else {
@@ -200,32 +264,47 @@ impl<'a> Parser<'a> {
             TokenType::Semicolon,
             "Expect ';' after variable declaration.",
         );
-
-        self.define_global(global);
     }
 
-    fn parse_variable(&mut self, msg: &str) -> u32 {
+    fn parse_variable(&mut self, msg: &str) {
         self.consume(TokenType::Identifier, msg);
-        self.identifier_constant(&self.previous.lexeme)
+
+        self.declare_variable();
     }
 
-    fn identifier_constant(&mut self, token: &str) -> u32 {
-        let chunk = self.current_chunk();
-        chunk.add_constant(Value::string(token))
-    }
-
-    fn define_global(&mut self, i: u32) {
-        self.emit_byte(OpCode::DefineGlobal);
-        let line = self.previous.line;
-        let chunk = self.current_chunk();
-        chunk.write_index(i, line);
+    fn declare_variable(&mut self) {
+        let t = self.previous.clone();
+        if self.compiler.variable_already_declared(&t) {
+            self.error_at_current("Already a variable with this name in this scope.");
+        }
+        self.compiler.add_local(t);
     }
 
     fn statement(&mut self) {
         if self.matches(TokenType::Print) {
             self.print_statement();
+        } else if self.matches(TokenType::LeftBrace) {
+            self.block();
         } else {
             self.expression_statement();
+        }
+    }
+
+    fn block(&mut self) {
+        self.compiler.begin_scope();
+        while self.current.kind != TokenType::RightBrace && self.current.kind != TokenType::Eof {
+            self.declaration();
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.");
+        self.end_scope();
+    }
+
+    fn end_scope(&mut self) {
+        self.compiler.end_scope();
+        let removed_from_stack = self.compiler.locals_removed_from_stack();
+        for _ in 0..removed_from_stack {
+            self.emit_byte(OpCode::Pop);
         }
     }
 
@@ -261,7 +340,6 @@ impl<'a> Parser<'a> {
             Prefix::String => self.string(),
         }
 
-
         while prec <= get_rule(&self.current.kind).precedence {
             self.advance();
             match get_rule(&self.previous.kind).infix {
@@ -281,16 +359,34 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        let i = self.identifier_constant(self.previous.lexeme);
-        let line = self.previous.line;
-        if can_assign && self.matches(TokenType::Equal) {
-            self.expression();
-            self.emit_byte(OpCode::SetGlobal);
+        if let Some(i) = self.resolve_local(&self.previous.lexeme) {
+            let line = self.previous.line;
+            if can_assign && self.matches(TokenType::Equal) {
+                self.expression();
+                self.emit_byte(OpCode::SetLocal);
+                let last = self.compiler.locals.first_mut().unwrap();
+                last.depth = Some(self.compiler.scope_depth);
+            } else {
+                self.emit_byte(OpCode::GetLocal);
+            }
+            let chunk = self.current_chunk();
+            chunk.write_index(i, line);
         } else {
-            self.emit_byte(OpCode::GetGlobal);
+            self.error_at_current(&*format!("Unknown variable '{}'.", self.previous.lexeme));
         }
-        let chunk = self.current_chunk();
-        chunk.write_index(i, line);
+    }
+
+    fn resolve_local(&mut self, name: &str) -> Option<u32> {
+        println!("search for {}, in {:?}", name, self.compiler.locals);
+        for (i, local) in self.compiler.locals.iter().enumerate().rev() {
+            if name == local.token.lexeme {
+                if local.depth.is_none() {
+                    self.error_at_current("Can't read local variable in its own initializer.");
+                }
+                return Some(i as u32)
+            }
+        }
+        None
     }
 
     fn literal(&mut self) {
@@ -636,7 +732,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Token<'a> {
     pub kind: TokenType,
     pub lexeme: &'a str,

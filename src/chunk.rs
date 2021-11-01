@@ -20,18 +20,6 @@ pub enum Value {
     Obj(Box<Object>),
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Nil => f.write_str("nil"),
-            Value::Bool(true) => f.write_str("true"),
-            Value::Bool(false) => f.write_str("false"),
-            Value::Number(n) => n.fmt(f),
-            Value::Obj(obj) => obj.fmt(f),
-        }
-    }
-}
-
 impl Value {
     pub fn from_number(n: f64) -> Self {
         Value::Number(n)
@@ -131,8 +119,8 @@ pub enum OpCode {
     Nil,
     Pop,
     DefineGlobal,
-    GetGlobal,
-    SetGlobal,
+    GetLocal,
+    SetLocal,
 }
 
 impl From<u8> for OpCode {
@@ -153,8 +141,8 @@ impl From<u8> for OpCode {
             12 => OpCode::Nil,
             13 => OpCode::Pop,
             14 => OpCode::DefineGlobal,
-            15 => OpCode::GetGlobal,
-            16 => OpCode::SetGlobal,
+            15 => OpCode::GetLocal,
+            16 => OpCode::SetLocal,
             _ => panic!("unexpected op code"),
         }
     }
@@ -178,8 +166,8 @@ impl From<OpCode> for u8 {
             OpCode::Nil => 12,
             OpCode::Pop => 13,
             OpCode::DefineGlobal => 14,
-            OpCode::GetGlobal => 15,
-            OpCode::SetGlobal => 16,
+            OpCode::GetLocal => 15,
+            OpCode::SetLocal => 16,
         }
     }
 }
@@ -268,24 +256,24 @@ impl Chunk {
                     index, self.constants[index as usize]
                 );
                 return offset + 5;
-            },
-            OpCode::GetGlobal => {
+            }
+            OpCode::GetLocal => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
-                    "OP_GET_GLOBAL    {} '{:?}'",
-                    index, self.constants[index as usize]
+                    "OP_GET_LOCAL     {}",
+                    index
                 );
                 return offset + 5;
             }
-            OpCode::SetGlobal => {
+            OpCode::SetLocal => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
-                    "OP_SET_GLOBAL    {} '{:?}'",
-                    index, self.constants[index as usize]
+                    "OP_SET_LOCAL     {}",
+                    index
                 );
                 return offset + 5;
             }

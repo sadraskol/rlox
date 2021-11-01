@@ -2,9 +2,9 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
 use crate::compiler::Parser;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::env::args;
-use std::collections::HashMap;
 
 mod chunk;
 mod compiler;
@@ -135,7 +135,7 @@ impl VM {
                     self.push(Value::from_bool(a.as_number() > b.as_number()));
                 }
                 OpCode::Print => {
-                    println!("{}", self.pop().as_str());
+                    println!("{}", self.pop().print());
                 }
                 OpCode::Nil => {
                     self.push(Value::Nil);
@@ -152,32 +152,20 @@ impl VM {
                     let value = self.pop();
                     self.globals.insert(key, value);
                 }
-                OpCode::GetGlobal => {
+                OpCode::GetLocal => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
                     self.ip += 4;
                     let sized_bytes = bytes.try_into().unwrap();
                     let index = u32::from_be_bytes(sized_bytes);
-                    let key = &self.chunk.constants[index as usize];
-                    if let Some(v) = self.globals.get(key.as_str()) {
-                        self.push(v.clone());
-                    } else {
-                        self.runtime_error(&format!("Undefined variable '{}'.", key.as_str()));
-                        return InterpretResult::RuntimeError;
-                    }
+                    self.push(self.stack[index as usize].clone());
                 }
-                OpCode::SetGlobal => {
+                OpCode::SetLocal => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
                     self.ip += 4;
                     let sized_bytes = bytes.try_into().unwrap();
                     let index = u32::from_be_bytes(sized_bytes);
-                    let key = self.chunk.constants[index as usize].as_str().to_string();
-                    let value = self.peek(0); // todo use peek instead of pop: the value remains on the stack
-                    if self.globals.get(key.as_str()).is_some() {
-                        self.globals.insert(key, value.clone());
-                    } else {
-                        self.runtime_error(&format!("Undefined variable '{}'.", key.as_str()));
-                        return InterpretResult::RuntimeError;
-                    }
+                    let value = self.peek(0).clone();
+                    self.stack[index as usize] = value;
                 }
             }
         }
