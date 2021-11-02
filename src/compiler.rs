@@ -307,7 +307,7 @@ impl<'a> Parser<'a> {
     fn end_scope(&mut self) {
         self.compiler.end_scope();
         let removed_from_stack = self.compiler.locals_removed_from_stack();
-        for _ in 0..removed_from_stack {
+        for _ in 1..removed_from_stack {
             self.emit_byte(OpCode::Pop);
         }
     }

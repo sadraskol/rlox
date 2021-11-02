@@ -1,11 +1,14 @@
-var global = "global";
+{
+    var g = "global a";
 
 {
-    var par1 = "su";
-    var par2 = "pet";
-    par2 = "per";
-    print par1 + par2;
-    print 4 * 1234;
+    var a = g;
+    {
+        var a = "inner a";
+        print a;
+    }
+    print "second global: " + a;
 }
 
-print global;
+print g;
+}
