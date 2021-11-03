@@ -118,9 +118,9 @@ pub enum OpCode {
     Print,
     Nil,
     Pop,
-    DefineGlobal,
     GetLocal,
     SetLocal,
+    JumpIfFalse,
 }
 
 impl From<u8> for OpCode {
@@ -140,7 +140,7 @@ impl From<u8> for OpCode {
             11 => OpCode::Print,
             12 => OpCode::Nil,
             13 => OpCode::Pop,
-            14 => OpCode::DefineGlobal,
+            14 => OpCode::JumpIfFalse,
             15 => OpCode::GetLocal,
             16 => OpCode::SetLocal,
             _ => panic!("unexpected op code"),
@@ -165,7 +165,7 @@ impl From<OpCode> for u8 {
             OpCode::Print => 11,
             OpCode::Nil => 12,
             OpCode::Pop => 13,
-            OpCode::DefineGlobal => 14,
+            OpCode::JumpIfFalse => 14,
             OpCode::GetLocal => 15,
             OpCode::SetLocal => 16,
         }
@@ -189,12 +189,18 @@ impl Chunk {
     }
 
     pub fn write_chunk(&mut self, code: OpCode, line: usize) {
+        if self.code.len() >= u32::MAX as usize {
+            panic!("Source code too long!");
+        }
         self.code.push(code.into());
         self.lines.push(line);
     }
 
-    pub fn write_index(&mut self, index: u32, line: usize) {
+    pub fn write_u32(&mut self, index: u32, line: usize) {
         for b in index.to_be_bytes() {
+            if self.code.len() >= u32::MAX as usize {
+                panic!("Source code too long!");
+            }
             self.code.push(b);
             self.lines.push(line);
         }
@@ -214,6 +220,10 @@ impl Chunk {
         while offset < self.code.len() {
             offset = self.disassemble_instruction(offset);
         }
+    }
+
+    pub fn size(&self) -> u32 {
+        self.code.len() as u32
     }
 
     fn disassemble_instruction(&self, offset: usize) -> usize {
@@ -247,34 +257,25 @@ impl Chunk {
             OpCode::Print => println!("OP_PRINT"),
             OpCode::Nil => println!("OP_NIL"),
             OpCode::Pop => println!("OP_POP"),
-            OpCode::DefineGlobal => {
+            OpCode::JumpIfFalse => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
-                println!(
-                    "OP_DEFINE_GLOBAL {} '{:?}'",
-                    index, self.constants[index as usize]
-                );
+                println!("OP_JUMP_IF_FALSE {}", index);
                 return offset + 5;
             }
             OpCode::GetLocal => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
-                println!(
-                    "OP_GET_LOCAL     {}",
-                    index
-                );
+                println!("OP_GET_LOCAL     {}", index);
                 return offset + 5;
             }
             OpCode::SetLocal => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
-                println!(
-                    "OP_SET_LOCAL     {}",
-                    index
-                );
+                println!("OP_SET_LOCAL     {}", index);
                 return offset + 5;
             }
         }

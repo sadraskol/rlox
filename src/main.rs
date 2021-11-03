@@ -143,14 +143,8 @@ impl VM {
                 OpCode::Pop => {
                     self.pop();
                 }
-                OpCode::DefineGlobal => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
-                    let sized_bytes = bytes.try_into().unwrap();
-                    let index = u32::from_be_bytes(sized_bytes);
-                    let key = self.chunk.constants[index as usize].as_str().to_string();
-                    let value = self.pop();
-                    self.globals.insert(key, value);
+                OpCode::JumpIfFalse => {
+                    panic!("jump if false not implemented");
                 }
                 OpCode::GetLocal => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];

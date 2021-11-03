@@ -40,10 +40,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_local(&mut self, token: Token<'a>) {
-        self.locals.push(Local {
-            token,
-            depth: None,
-        })
+        self.locals.push(Local { token, depth: None })
     }
 
     fn locals_removed_from_stack(&mut self) -> usize {
@@ -289,6 +286,8 @@ impl<'a> Parser<'a> {
             self.print_statement();
         } else if self.matches(TokenType::LeftBrace) {
             self.block();
+        } else if self.matches(TokenType::If) {
+            self.if_statement();
         } else {
             self.expression_statement();
         }
@@ -321,6 +320,34 @@ impl<'a> Parser<'a> {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value.");
         self.emit_byte(OpCode::Print);
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::LeftParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.statement();
+
+        self.patch_jump(then_jump);
+    }
+
+    fn emit_jump(&mut self, code: OpCode) -> u32 {
+        self.emit_byte(code);
+        let line = self.current.line;
+        let chunk = self.current_chunk();
+        chunk.write_u32(u32::MAX, line);
+        return chunk.size() - 4;
+    }
+
+    fn patch_jump(&mut self, offset: u32) {
+        let chunk = self.current_chunk();
+        let jump = chunk.size() - offset - 4;
+
+        for (i, b) in jump.to_be_bytes().iter().enumerate() {
+            chunk.code[offset as usize + i] = *b;
+        }
     }
 
     fn expression(&mut self) {
@@ -373,7 +400,7 @@ impl<'a> Parser<'a> {
                 self.emit_byte(OpCode::GetLocal);
             }
             let chunk = self.current_chunk();
-            chunk.write_index(i, line);
+            chunk.write_u32(i, line);
         } else {
             self.error_at_current(&*format!("Unknown variable '{}'.", self.previous.lexeme));
         }
@@ -385,7 +412,7 @@ impl<'a> Parser<'a> {
                 if local.depth.is_none() {
                     self.error_at_current("Can't read local variable in its own initializer.");
                 }
-                return Some(i as u32)
+                return Some(i as u32);
             }
         }
         None
@@ -456,7 +483,7 @@ impl<'a> Parser<'a> {
         let chunk = self.current_chunk();
         let i = chunk.add_constant(v);
         chunk.write_chunk(OpCode::Constant, line);
-        chunk.write_index(i, line);
+        chunk.write_u32(i, line);
     }
 
     fn consume(&mut self, kind: TokenType, msg: &str) {

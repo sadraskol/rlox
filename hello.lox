@@ -1,14 +1,17 @@
 {
     var g = "global a";
 
-{
-    var a = g;
     {
-        var a = "inner a";
-        print a;
+        var a = g;
+        {
+            var a = "inner a";
+            print a;
+        }
+        if (false) {
+            print "inner if";
+        }
+        print "second global: " + a;
     }
-    print "second global: " + a;
-}
 
     print g;
 }
