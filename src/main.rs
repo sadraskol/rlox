@@ -2,7 +2,6 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
 use crate::compiler::Parser;
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::env::args;
 
@@ -13,7 +12,6 @@ struct VM {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
-    globals: HashMap<String, Value>,
 }
 
 enum InterpretResult {
@@ -28,7 +26,6 @@ impl VM {
             chunk,
             ip: 0,
             stack: vec![],
-            globals: HashMap::new(),
         }
     }
 
@@ -144,7 +141,20 @@ impl VM {
                     self.pop();
                 }
                 OpCode::JumpIfFalse => {
-                    panic!("jump if false not implemented");
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let jump = u32::from_be_bytes(sized_bytes);
+                    if !self.peek(0).as_bool() {
+                        self.ip += jump as usize;
+                    }
+                }
+                OpCode::Jump => {
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let jump = u32::from_be_bytes(sized_bytes);
+                    self.ip += jump as usize;
                 }
                 OpCode::GetLocal => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
@@ -223,7 +233,6 @@ fn run_file(f_name: String) {
             chunk,
             ip: 0,
             stack: vec![],
-            globals: HashMap::new(),
         };
         vm.run();
     } else {

@@ -121,6 +121,7 @@ pub enum OpCode {
     GetLocal,
     SetLocal,
     JumpIfFalse,
+    Jump,
 }
 
 impl From<u8> for OpCode {
@@ -143,6 +144,7 @@ impl From<u8> for OpCode {
             14 => OpCode::JumpIfFalse,
             15 => OpCode::GetLocal,
             16 => OpCode::SetLocal,
+            17 => OpCode::Jump,
             _ => panic!("unexpected op code"),
         }
     }
@@ -168,6 +170,7 @@ impl From<OpCode> for u8 {
             OpCode::JumpIfFalse => 14,
             OpCode::GetLocal => 15,
             OpCode::SetLocal => 16,
+            OpCode::Jump => 17,
         }
     }
 }
@@ -262,6 +265,13 @@ impl Chunk {
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!("OP_JUMP_IF_FALSE {}", index);
+                return offset + 5;
+            }
+            OpCode::Jump => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!("OP_JUMP          {}", index);
                 return offset + 5;
             }
             OpCode::GetLocal => {

@@ -325,12 +325,17 @@ impl<'a> Parser<'a> {
     fn if_statement(&mut self) {
         self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
         self.expression();
-        self.consume(TokenType::LeftParen, "Expect ')' after condition.");
-
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
         let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
         self.statement();
-
+        let else_jump = self.emit_jump(OpCode::Jump);
         self.patch_jump(then_jump);
+        self.emit_byte(OpCode::Pop);
+        if self.matches(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
     }
 
     fn emit_jump(&mut self, code: OpCode) -> u32 {
