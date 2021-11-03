@@ -54,8 +54,8 @@ impl<'a> Compiler<'a> {
                 if d <= self.scope_depth {
                     new_locals.push(l);
                 } else {
+                    locals_off_the_stack += 1;
                 }
-                locals_off_the_stack += 1;
             } else {
                 new_locals.push(l);
             }
@@ -307,7 +307,7 @@ impl<'a> Parser<'a> {
     fn end_scope(&mut self) {
         self.compiler.end_scope();
         let removed_from_stack = self.compiler.locals_removed_from_stack();
-        for _ in 1..removed_from_stack {
+        for _ in 0..removed_from_stack {
             self.emit_byte(OpCode::Pop);
         }
     }
@@ -315,7 +315,6 @@ impl<'a> Parser<'a> {
     fn expression_statement(&mut self) {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after expression.");
-        self.emit_byte(OpCode::Pop);
     }
 
     fn print_statement(&mut self) {

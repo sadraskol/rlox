@@ -10,5 +10,5 @@
     print "second global: " + a;
 }
 
-print g;
+    print g;
 }
