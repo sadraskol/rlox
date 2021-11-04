@@ -292,19 +292,25 @@ impl<'a> Parser<'a> {
             self.if_statement();
         } else if self.matches(TokenType::While) {
             self.while_statement();
+        } else if self.matches(TokenType::For) {
+            self.for_statement();
         } else {
             self.expression_statement();
         }
     }
 
     fn block(&mut self) {
-        self.compiler.begin_scope();
+        self.begin_scope();
         while self.current.kind != TokenType::RightBrace && self.current.kind != TokenType::Eof {
             self.declaration();
         }
 
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
         self.end_scope();
+    }
+
+    fn begin_scope(&mut self) {
+        self.compiler.begin_scope();
     }
 
     fn end_scope(&mut self) {
@@ -330,12 +336,16 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
         let then_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_byte(OpCode::Pop);
+
         self.statement();
+
         let else_jump = self.emit_jump(OpCode::Jump);
         self.patch_jump(then_jump);
         self.emit_byte(OpCode::Pop);
+
         if self.matches(TokenType::Else) {
             self.statement();
         }
@@ -344,7 +354,7 @@ impl<'a> Parser<'a> {
 
     fn while_statement(&mut self) {
         let loop_start = self.current_chunk().size();
-        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
@@ -356,6 +366,53 @@ impl<'a> Parser<'a> {
 
         self.patch_jump(end_jump);
         self.emit_byte(OpCode::Pop);
+    }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+        if self.matches(TokenType::Semicolon) {
+            // No initializer.
+        } else if self.matches(TokenType::Var) {
+        self.var_declaration();
+        } else {
+        self.expression_statement();
+        }
+
+        let mut loop_start = self.current_chunk().size();
+        let mut exit_jump = None;
+        if !self.matches(TokenType::Semicolon) {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
+            self.emit_byte(OpCode::Pop)
+        }
+
+        if !self.matches(TokenType::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump);
+            let increment_start = self.current_chunk().size();
+            self.expression();
+            self.emit_byte(OpCode::Pop);
+            self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+        
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+          }
+
+        self.statement();
+
+        self.emit_loop(loop_start);
+
+
+        if let Some(jump) = exit_jump {
+            self.patch_jump(jump);
+            self.emit_byte(OpCode::Pop);
+        }
+
+        self.end_scope();
     }
 
     fn emit_loop(&mut self, offset: u32) {
