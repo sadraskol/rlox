@@ -85,6 +85,8 @@ enum Prefix {
 enum Infix {
     None,
     Binary,
+    Or,
+    And,
 }
 
 struct Rule {
@@ -127,7 +129,7 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::Identifier => Rule::init(Prefix::Variable, Infix::None, Precedence::None),
         TokenType::String => Rule::init(Prefix::String, Infix::None, Precedence::None),
         TokenType::Number => Rule::init(Prefix::Number, Infix::None, Precedence::None),
-        TokenType::And => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::And => Rule::init(Prefix::None, Infix::And, Precedence::And),
         TokenType::Class => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Else => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::False => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
@@ -135,7 +137,7 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::Fun => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::If => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Nil => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
-        TokenType::Or => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Or => Rule::init(Prefix::None, Infix::Or, Precedence::Or),
         TokenType::Print => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Return => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Super => Rule::init(Prefix::None, Infix::None, Precedence::None),
@@ -288,6 +290,8 @@ impl<'a> Parser<'a> {
             self.block();
         } else if self.matches(TokenType::If) {
             self.if_statement();
+        } else if self.matches(TokenType::While) {
+            self.while_statement();
         } else {
             self.expression_statement();
         }
@@ -338,6 +342,31 @@ impl<'a> Parser<'a> {
         self.patch_jump(else_jump);
     }
 
+    fn while_statement(&mut self) {
+        let loop_start = self.current_chunk().size();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(end_jump);
+        self.emit_byte(OpCode::Pop);
+    }
+
+    fn emit_loop(&mut self, offset: u32) {
+        self.emit_byte(OpCode::Loop);
+        let line = self.current.line;
+        let chunk = self.current_chunk();
+        let jump = (chunk.size() as i64 + 4) - offset as i64;
+        chunk.write_u32(jump as u32, line);
+
+    }
+
     fn emit_jump(&mut self, code: OpCode) -> u32 {
         self.emit_byte(code);
         let line = self.current.line;
@@ -380,6 +409,8 @@ impl<'a> Parser<'a> {
             match get_rule(&self.previous.kind).infix {
                 Infix::None => {}
                 Infix::Binary => self.binary(),
+                Infix::And => self.and(),
+                Infix::Or => self.or(),
             }
         }
 
@@ -452,6 +483,26 @@ impl<'a> Parser<'a> {
             TokenType::Bang => self.emit_byte(OpCode::Not),
             other => panic!("unknown unary operator: {:?}", other),
         }
+    }
+
+    fn and(&mut self) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+
+        self.emit_byte(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_byte(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
     }
 
     fn binary(&mut self) {

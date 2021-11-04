@@ -7,11 +7,10 @@
             var a = "inner a";
             print a;
         }
-        if (true) {
-            var i = 23;
-            print i + 123;
-        } else {
-            print "other else";
+        var i = 2;
+        while (i < 23) {
+            i = i + 2;
+            print i;
         }
         print "second global: " + a;
     }

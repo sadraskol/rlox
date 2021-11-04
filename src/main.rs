@@ -156,6 +156,13 @@ impl VM {
                     let jump = u32::from_be_bytes(sized_bytes);
                     self.ip += jump as usize;
                 }
+                OpCode::Loop => {
+                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
+                    self.ip += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let jump = u32::from_be_bytes(sized_bytes);
+                    self.ip -= jump as usize;
+                }
                 OpCode::GetLocal => {
                     let bytes = &self.chunk.code[self.ip..self.ip + 4];
                     self.ip += 4;
