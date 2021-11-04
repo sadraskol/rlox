@@ -21,14 +21,6 @@ enum InterpretResult {
 }
 
 impl VM {
-    fn new(chunk: Chunk) -> Self {
-        VM {
-            chunk,
-            ip: 0,
-            stack: vec![],
-        }
-    }
-
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
     }
@@ -201,19 +193,6 @@ impl VM {
     }
 
     fn reset_stack(&mut self) {}
-
-    pub fn interpret(&mut self, source: &str) -> InterpretResult {
-        let mut compiler = Parser::init(source);
-        let chunk = compiler.compile();
-
-        if let Some(chunk) = chunk {
-            self.chunk = chunk;
-            self.ip = 0;
-            self.run()
-        } else {
-            InterpretResult::CompileError
-        }
-    }
 }
 
 fn main() {

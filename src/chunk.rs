@@ -83,7 +83,7 @@ impl Value {
     pub fn as_str(&self) -> &str {
         if let Value::Obj(o) = self {
             if let Object::Str { s } = &**o {
-                &s
+                s
             } else {
                 panic!("not a string");
             }

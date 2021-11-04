@@ -23,11 +23,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth = self.scope_depth + 1;
+        self.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth = self.scope_depth - 1;
+        self.scope_depth -= 1;
     }
 
     fn variable_already_declared(&self, token: &Token<'a>) -> bool {
@@ -276,7 +276,7 @@ impl<'a> Parser<'a> {
     }
 
     fn declare_variable(&mut self) {
-        let t = self.previous.clone();
+        let t = self.previous;
         if self.compiler.variable_already_declared(&t) {
             self.error_at_current("Already a variable with this name in this scope.");
         }
@@ -375,9 +375,9 @@ impl<'a> Parser<'a> {
         if self.matches(TokenType::Semicolon) {
             // No initializer.
         } else if self.matches(TokenType::Var) {
-        self.var_declaration();
+            self.var_declaration();
         } else {
-        self.expression_statement();
+            self.expression_statement();
         }
 
         let mut loop_start = self.current_chunk().size();
@@ -396,16 +396,15 @@ impl<'a> Parser<'a> {
             self.expression();
             self.emit_byte(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
-        
+
             self.emit_loop(loop_start);
             loop_start = increment_start;
             self.patch_jump(body_jump);
-          }
+        }
 
         self.statement();
 
         self.emit_loop(loop_start);
-
 
         if let Some(jump) = exit_jump {
             self.patch_jump(jump);
@@ -421,7 +420,6 @@ impl<'a> Parser<'a> {
         let chunk = self.current_chunk();
         let jump = (chunk.size() as i64 + 4) - offset as i64;
         chunk.write_u32(jump as u32, line);
-
     }
 
     fn emit_jump(&mut self, code: OpCode) -> u32 {
@@ -429,7 +427,7 @@ impl<'a> Parser<'a> {
         let line = self.current.line;
         let chunk = self.current_chunk();
         chunk.write_u32(u32::MAX, line);
-        return chunk.size() - 4;
+        chunk.size() - 4
     }
 
     fn patch_jump(&mut self, offset: u32) {
@@ -482,7 +480,7 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        if let Some(i) = self.resolve_local(&self.previous.lexeme) {
+        if let Some(i) = self.resolve_local(self.previous.lexeme) {
             let line = self.previous.line;
             if can_assign && self.matches(TokenType::Equal) {
                 self.expression();
