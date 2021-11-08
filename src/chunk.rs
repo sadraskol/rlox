@@ -1,14 +1,40 @@
 use std::convert::TryInto;
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Function {
+    pub arity: u32,
+    pub chunk: Chunk,
+    pub name: String,
+}
+
+impl Function {
+    pub fn new(arity: u32, name: &str) -> Self {
+        Function {
+            arity,
+            name: name.to_string(),
+            chunk: Chunk::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-    Str { s: String },
+    Str(String),
+    Fun(Function),
 }
 
 impl Object {
     pub fn print(&self) -> String {
-        let Object::Str { s } = self;
-        s.to_string()
+        match self {
+            Object::Str(s) => s.to_string(),
+            Object::Fun(Function { name, .. }) => {
+                if name == "<script>" {
+                    "<script>".to_string()
+                } else {
+                    format!("<fn {}>", name)
+                }
+            }
+        }
     }
 }
 
@@ -28,7 +54,7 @@ impl Value {
         Value::Bool(b)
     }
     pub fn string(s: &str) -> Self {
-        let string = Object::Str { s: s.to_string() };
+        let string = Object::Str(s.to_string());
         Value::Obj(Box::new(string))
     }
     pub fn nil() -> Self {
@@ -37,31 +63,26 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         if let Value::Obj(o) = self {
-            if let Object::Str { .. } = &**o {
-                true
-            } else {
-                false
-            }
+            matches!(&**o, Object::Str { .. })
+        } else {
+            false
+        }
+    }
+    pub fn is_function(&self) -> bool {
+        if let Value::Obj(o) = self {
+            matches!(&**o, Object::Fun { .. })
         } else {
             false
         }
     }
     pub fn is_bool(&self) -> bool {
-        if let Value::Bool(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Value::Bool(_))
     }
     pub fn is_nil(&self) -> bool {
         self == &Value::Nil
     }
     pub fn is_number(&self) -> bool {
-        if let Value::Number(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Value::Number(_))
     }
 
     pub fn as_number(&self) -> f64 {
@@ -82,8 +103,20 @@ impl Value {
 
     pub fn as_str(&self) -> &str {
         if let Value::Obj(o) = self {
-            if let Object::Str { s } = &**o {
+            if let Object::Str(s) = &**o {
                 s
+            } else {
+                panic!("not a string");
+            }
+        } else {
+            panic!("not an object");
+        }
+    }
+
+    pub fn as_function(&self) -> &Function {
+        if let Value::Obj(o) = self {
+            if let Object::Fun(fun) = &**o {
+                fun
             } else {
                 panic!("not a string");
             }
@@ -178,7 +211,7 @@ impl From<OpCode> for u8 {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub lines: Vec<usize>,

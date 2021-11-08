@@ -1,4 +1,5 @@
 use crate::chunk::Chunk;
+use crate::chunk::Function;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
 use std::str::FromStr;
@@ -9,9 +10,16 @@ struct Local<'a> {
     depth: Option<usize>,
 }
 
+enum FunctionType {
+    Function,
+    Script,
+}
+
 struct Compiler<'a> {
     locals: Vec<Local<'a>>,
     scope_depth: usize,
+    function: Function,
+    kind: FunctionType,
 }
 
 impl<'a> Compiler<'a> {
@@ -19,6 +27,8 @@ impl<'a> Compiler<'a> {
         Compiler {
             locals: vec![],
             scope_depth: 0,
+            function: Function::new(0, "<script>"),
+            kind: FunctionType::Script,
         }
     }
 
@@ -171,7 +181,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn compile(&mut self) -> Option<Chunk> {
+    pub fn compile(&mut self) -> Option<Function> {
         self.chunk = Some(Chunk::new());
 
         self.advance();
@@ -179,18 +189,22 @@ impl<'a> Parser<'a> {
             self.declaration();
         }
         self.consume(TokenType::Eof, "Expect end of expression.");
-        self.end_compiler();
+        let function = self.end_compiler();
 
         if self.had_error {
             None
         } else {
-            Some(self.chunk.as_ref().unwrap().clone())
+            Some(function)
         }
     }
 
-    fn end_compiler(&mut self) {
+    fn end_compiler(&mut self) -> Function {
         self.emit_return();
-        self.chunk.as_ref().unwrap().disassemble("code");
+        // todo is it what we want?
+        let function = self.compiler.function.clone();
+        function.chunk.disassemble(&function.name);
+
+        function
     }
 
     fn emit_return(&mut self) {
@@ -606,7 +620,7 @@ impl<'a> Parser<'a> {
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
-        self.chunk.as_mut().unwrap()
+        &mut self.compiler.function.chunk
     }
 
     fn emit_byte(&mut self, b: OpCode) {

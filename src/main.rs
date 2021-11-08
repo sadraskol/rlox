@@ -1,4 +1,4 @@
-use crate::chunk::Chunk;
+use crate::chunk::Function;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
 use crate::compiler::Parser;
@@ -8,8 +8,14 @@ use std::env::args;
 mod chunk;
 mod compiler;
 
+struct CallStack {
+    function: Function,
+    ip: usize,
+    offset: usize,
+}
+
 struct VM {
-    chunk: Chunk,
+    frames: Vec<CallStack>,
     ip: usize,
     stack: Vec<Value>,
 }
@@ -29,21 +35,30 @@ impl VM {
         self.stack.push(v);
     }
 
+    fn frame(&self) -> &CallStack {
+        self.frames.last().unwrap()
+    }
+
+    fn frame_mut(&mut self) -> &mut CallStack {
+        self.frames.last_mut().unwrap()
+    }
+
     fn run(&mut self) -> InterpretResult {
         loop {
-            let instruction = self.chunk.code[self.ip];
-            self.ip += 1;
+            let instruction = self.frame().function.chunk.code[self.frame().ip];
+            self.frame_mut().ip += 1;
             match instruction.into() {
                 OpCode::Return => {
                     return InterpretResult::Ok;
                 }
                 OpCode::Constant => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let index = u32::from_be_bytes(sized_bytes);
-                    let constant = &self.chunk.constants[index as usize];
-                    self.stack.push(constant.clone());
+                    let constant = (&self.frame().function.chunk.constants[index as usize]).clone();
+                    self.stack.push(constant);
                 }
                 OpCode::Divide => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
@@ -133,42 +148,48 @@ impl VM {
                     self.pop();
                 }
                 OpCode::JumpIfFalse => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let jump = u32::from_be_bytes(sized_bytes);
                     if !self.peek(0).as_bool() {
-                        self.ip += jump as usize;
+                        self.frame_mut().ip += jump as usize;
                     }
                 }
                 OpCode::Jump => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let jump = u32::from_be_bytes(sized_bytes);
-                    self.ip += jump as usize;
+                    self.frame_mut().ip += jump as usize;
                 }
                 OpCode::Loop => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let jump = u32::from_be_bytes(sized_bytes);
-                    self.ip -= jump as usize;
+                    self.frame_mut().ip -= jump as usize;
                 }
                 OpCode::GetLocal => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let index = u32::from_be_bytes(sized_bytes);
-                    self.push(self.stack[index as usize].clone());
+                    self.push(self.stack[self.frame().offset + index as usize].clone());
                 }
                 OpCode::SetLocal => {
-                    let bytes = &self.chunk.code[self.ip..self.ip + 4];
-                    self.ip += 4;
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
                     let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
                     let index = u32::from_be_bytes(sized_bytes);
+                    let offset = self.frame().offset;
                     let value = self.peek(0).clone();
-                    self.stack[index as usize] = value;
+                    self.stack[offset + index as usize] = value;
                 }
             }
         }
@@ -187,8 +208,11 @@ impl VM {
 
     fn runtime_error(&mut self, msg: &str) {
         eprintln!("{}", msg);
-        let instruction = self.ip - 1; // todo this size depends on the last instruction size
-        eprintln!("[line {}] in script", self.chunk.lines[instruction]);
+        let instruction = self.frame().ip - 1; // todo this size depends on the last instruction size
+        eprintln!(
+            "[line {}] in script",
+            self.frame().function.chunk.lines[instruction]
+        );
         self.reset_stack();
     }
 
@@ -212,11 +236,15 @@ fn main() {
 fn run_file(f_name: String) {
     let source = std::fs::read_to_string(f_name).unwrap();
     let mut compiler = Parser::init(&source);
-    let chunk = compiler.compile();
+    let script = compiler.compile();
 
-    if let Some(chunk) = chunk {
+    if let Some(script) = script {
         let mut vm = VM {
-            chunk,
+            frames: vec![CallStack {
+                function: script,
+                offset: 0,
+                ip: 0,
+            }],
             ip: 0,
             stack: vec![],
         };
