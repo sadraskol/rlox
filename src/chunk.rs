@@ -57,6 +57,10 @@ impl Value {
         let string = Object::Str(s.to_string());
         Value::Obj(Box::new(string))
     }
+    pub fn function(f: Function) -> Self {
+        let function = Object::Fun(f);
+        Value::Obj(Box::new(function))
+    }
     pub fn nil() -> Self {
         Value::Nil
     }
@@ -156,6 +160,7 @@ pub enum OpCode {
     JumpIfFalse,
     Jump,
     Loop,
+    Debug,
 }
 
 impl From<u8> for OpCode {
@@ -180,6 +185,7 @@ impl From<u8> for OpCode {
             16 => OpCode::SetLocal,
             17 => OpCode::Jump,
             18 => OpCode::Loop,
+            19 => OpCode::Debug,
             _ => panic!("unexpected op code"),
         }
     }
@@ -207,6 +213,7 @@ impl From<OpCode> for u8 {
             OpCode::SetLocal => 16,
             OpCode::Jump => 17,
             OpCode::Loop => 18,
+            OpCode::Debug => 19,
         }
     }
 }
@@ -296,6 +303,7 @@ impl Chunk {
             OpCode::Print => println!("OP_PRINT"),
             OpCode::Nil => println!("OP_NIL"),
             OpCode::Pop => println!("OP_POP"),
+            OpCode::Debug => println!("OP_DEBUG"),
             OpCode::JumpIfFalse => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();

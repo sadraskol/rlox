@@ -14,6 +14,11 @@
         }
         print "second global: " + a;
     }
-
     print g;
 }
+
+fun are_we_having_it_yet() {
+    print "yes we are!";
+}
+
+print are_we_having_it_yet;

@@ -10,12 +10,14 @@ struct Local<'a> {
     depth: Option<usize>,
 }
 
+#[derive(PartialEq)]
 enum FunctionType {
     Function,
     Script,
 }
 
 struct Compiler<'a> {
+    enclosing: Option<Box<Compiler<'a>>>,
     locals: Vec<Local<'a>>,
     scope_depth: usize,
     function: Function,
@@ -25,11 +27,16 @@ struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     fn new() -> Self {
         Compiler {
+            enclosing: None,
             locals: vec![],
             scope_depth: 0,
             function: Function::new(0, "<script>"),
             kind: FunctionType::Script,
         }
+    }
+
+    fn enclose(&mut self, enclosing: Compiler<'a>) {
+        self.enclosing = Some(Box::new(enclosing));
     }
 
     fn begin_scope(&mut self) {
@@ -155,6 +162,7 @@ fn get_rule(kind: &TokenType) -> Rule {
         TokenType::True => Rule::init(Prefix::Literal, Infix::None, Precedence::None),
         TokenType::Var => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::While => Rule::init(Prefix::None, Infix::None, Precedence::None),
+        TokenType::Debug => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Error => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::Eof => Rule::init(Prefix::None, Infix::None, Precedence::None),
     }
@@ -200,10 +208,12 @@ impl<'a> Parser<'a> {
 
     fn end_compiler(&mut self) -> Function {
         self.emit_return();
-        // todo is it what we want?
         let function = self.compiler.function.clone();
         function.chunk.disassemble(&function.name);
 
+        if let Some(enclosing) = self.compiler.enclosing.take() {
+            self.compiler = *enclosing;
+        }
         function
     }
 
@@ -233,7 +243,9 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) {
-        if self.matches(TokenType::Var) {
+        if self.matches(TokenType::Fun) {
+            self.function_declaration();
+        } else if self.matches(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -242,6 +254,43 @@ impl<'a> Parser<'a> {
         if self.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn function_declaration(&mut self) {
+        self.parse_variable("Expect function name.");
+        self.mark_initialized();
+        self.function(FunctionType::Function);
+    }
+
+    fn function(&mut self, kind: FunctionType) {
+        let mut compiler = Compiler::new();
+        if kind != FunctionType::Script {
+            compiler.function.name = self.previous.lexeme.to_string();
+        }
+        let enclosing = std::mem::replace(&mut self.compiler, compiler);
+        self.compiler.enclose(enclosing);
+
+        self.begin_scope();
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        if !self.matches(TokenType::RightParen) {
+            loop {
+                self.compiler.function.arity += 1;
+                if self.compiler.function.arity > 255 {
+                    self.error_at_current("Can't have more than 255 parameters");
+                }
+                self.parse_variable("Expect parameter name.");
+                self.mark_initialized();
+                if !self.matches(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
+
+        self.block();
+
+        let f = self.end_compiler();
+        self.emit_constant(Value::function(f));
     }
 
     fn synchronize(&mut self) {
@@ -274,13 +323,17 @@ impl<'a> Parser<'a> {
             self.emit_byte(OpCode::Nil);
         }
 
-        let last = self.compiler.locals.last_mut().unwrap();
-        last.depth = Some(self.compiler.scope_depth);
+        self.mark_initialized();
 
         self.consume(
             TokenType::Semicolon,
             "Expect ';' after variable declaration.",
         );
+    }
+
+    fn mark_initialized(&mut self) {
+        let last = self.compiler.locals.last_mut().unwrap();
+        last.depth = Some(self.compiler.scope_depth);
     }
 
     fn parse_variable(&mut self, msg: &str) {
@@ -298,7 +351,9 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) {
-        if self.matches(TokenType::Print) {
+        if self.matches(TokenType::Debug) {
+            self.debug_statement();
+        } else if self.matches(TokenType::Print) {
             self.print_statement();
         } else if self.matches(TokenType::LeftBrace) {
             self.block();
@@ -338,6 +393,12 @@ impl<'a> Parser<'a> {
     fn expression_statement(&mut self) {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_byte(OpCode::Pop);
+    }
+
+    fn debug_statement(&mut self) {
+        self.consume(TokenType::Semicolon, "Expect ';' after debug.");
+        self.emit_byte(OpCode::Debug);
     }
 
     fn print_statement(&mut self) {
@@ -499,8 +560,6 @@ impl<'a> Parser<'a> {
             if can_assign && self.matches(TokenType::Equal) {
                 self.expression();
                 self.emit_byte(OpCode::SetLocal);
-                let last = self.compiler.locals.last_mut().unwrap();
-                last.depth = Some(self.compiler.scope_depth);
             } else {
                 self.emit_byte(OpCode::GetLocal);
             }
@@ -741,6 +800,7 @@ impl<'a> Scanner<'a> {
         match self.source.chars().nth(self.start).unwrap() {
             'a' => self.check_keyword(1, 2, "nd", TokenType::And),
             'c' => self.check_keyword(1, 4, "lass", TokenType::Class),
+            'd' => self.check_keyword(1, 4, "ebug", TokenType::Debug),
             'e' => self.check_keyword(1, 3, "lse", TokenType::Else),
             'f' => {
                 if self.current - self.start > 1 {
@@ -933,6 +993,7 @@ enum TokenType {
     True,
     Var,
     While,
+    Debug,
     Error,
     Eof,
 }

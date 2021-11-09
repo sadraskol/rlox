@@ -16,7 +16,6 @@ struct CallStack {
 
 struct VM {
     frames: Vec<CallStack>,
-    ip: usize,
     stack: Vec<Value>,
 }
 
@@ -191,6 +190,12 @@ impl VM {
                     let value = self.peek(0).clone();
                     self.stack[offset + index as usize] = value;
                 }
+                OpCode::Debug => {
+                    for v in &self.stack {
+                        print!("[{}] ", v.print());
+                    }
+                    println!();
+                }
             }
         }
     }
@@ -245,7 +250,6 @@ fn run_file(f_name: String) {
                 offset: 0,
                 ip: 0,
             }],
-            ip: 0,
             stack: vec![],
         };
         vm.run();
