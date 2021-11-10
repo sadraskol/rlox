@@ -74,16 +74,13 @@ impl Value {
     }
     pub fn is_function(&self) -> bool {
         if let Value::Obj(o) = self {
-            matches!(&**o, Object::Fun(f))
+            matches!(&**o, Object::Fun(_))
         } else {
             false
         }
     }
     pub fn is_bool(&self) -> bool {
         matches!(self, Value::Bool(_))
-    }
-    pub fn is_nil(&self) -> bool {
-        self == &Value::Nil
     }
     pub fn is_number(&self) -> bool {
         matches!(self, Value::Number(_))
@@ -298,10 +295,7 @@ impl Chunk {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let args_c = u32::from_be_bytes(sized_bytes);
-                println!(
-                    "OP_CALL      {}",
-                    args_c
-                );
+                println!("OP_CALL      {}", args_c);
                 return offset + 5;
             }
             OpCode::Divide => println!("OP_DIVIDE"),

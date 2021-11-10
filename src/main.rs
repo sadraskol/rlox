@@ -22,7 +22,6 @@ struct VM {
 
 enum InterpretResult {
     Ok,
-    CompileError,
     RuntimeError,
 }
 
@@ -225,13 +224,16 @@ impl VM {
         if f.is_function() {
             let function = f.as_function().clone();
             if function.arity != argc {
-                self.runtime_error(&format!("Expected {} arguments but got {}.", function.arity, argc));
-                return false;
+                self.runtime_error(&format!(
+                    "Expected {} arguments but got {}.",
+                    function.arity, argc
+                ));
+                false
             } else {
                 self.frames.push(CallStack {
                     function,
                     ip: 0,
-                    offset: self.stack.len() - argc as usize
+                    offset: self.stack.len() - argc as usize,
                 });
                 true
             }
@@ -257,8 +259,7 @@ impl VM {
             let instruction = frame.ip - 1;
             eprintln!(
                 "[line {}] in {}",
-                frame.function.chunk.lines[instruction],
-                frame.function.name
+                frame.function.chunk.lines[instruction], frame.function.name
             );
         }
         self.reset_stack();
