@@ -219,6 +219,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_byte(OpCode::Nil);
         self.emit_byte(OpCode::Return);
     }
 
@@ -365,6 +366,8 @@ impl<'a> Parser<'a> {
             self.while_statement();
         } else if self.matches(TokenType::For) {
             self.for_statement();
+        } else if self.matches(TokenType::Return) {
+            self.return_statement();
         } else {
             self.expression_statement();
         }
@@ -513,6 +516,20 @@ impl<'a> Parser<'a> {
 
         for (i, b) in jump.to_be_bytes().iter().enumerate() {
             chunk.code[offset as usize + i] = *b;
+        }
+    }
+
+    fn return_statement(&mut self) {
+        if self.compiler.kind == FunctionType::Script {
+            self.error_at_current("Can't return from top-level code.");
+        }
+
+        if self.matches(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value.");
+            self.emit_byte(OpCode::Return);
         }
     }
 

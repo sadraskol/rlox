@@ -49,7 +49,14 @@ impl VM {
             self.frame_mut().ip += 1;
             match instruction.into() {
                 OpCode::Return => {
-                    return InterpretResult::Ok;
+                    let v = self.pop();
+                    let frame = self.frames.pop().unwrap();
+                    // here lies our garbage collector!
+                    self.stack.truncate(frame.offset);
+                    if self.frames.is_empty() {
+                        return InterpretResult::Ok;
+                    }
+                    self.push(v);
                 }
                 OpCode::Constant => {
                     let bytes =
