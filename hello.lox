@@ -1,24 +1,12 @@
-{
-    var g = "global a";
-
-    {
-        var a = g;
-        {
-            var a = "inner a";
-            print a;
+fun a() {
+    fun b() {
+        fun c() {
+            1 + "hello";
         }
-        var i = 2;
-        while (i < 23) {
-            i = i + 2;
-            print i;
-        }
-        print "second global: " + a;
+        c();
     }
-    print g;
+    b();
 }
 
-fun are_we_having_it_yet() {
-    print "yes we are!";
-}
 
-print are_we_having_it_yet;
+a();

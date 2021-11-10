@@ -104,6 +104,7 @@ enum Infix {
     Binary,
     Or,
     And,
+    Call,
 }
 
 struct Rule {
@@ -124,7 +125,7 @@ impl Rule {
 
 fn get_rule(kind: &TokenType) -> Rule {
     match kind {
-        TokenType::LeftParen => Rule::init(Prefix::Grouping, Infix::None, Precedence::None),
+        TokenType::LeftParen => Rule::init(Prefix::Grouping, Infix::Call, Precedence::Call),
         TokenType::RightParen => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::LeftBrace => Rule::init(Prefix::None, Infix::None, Precedence::None),
         TokenType::RightBrace => Rule::init(Prefix::None, Infix::None, Precedence::None),
@@ -284,6 +285,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
+            self.consume(TokenType::RightParen, "Expect ')' after arguments.");
         }
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
 
@@ -538,6 +540,7 @@ impl<'a> Parser<'a> {
             self.advance();
             match get_rule(&self.previous.kind).infix {
                 Infix::None => {}
+                Infix::Call => self.call(),
                 Infix::Binary => self.binary(),
                 Infix::And => self.and(),
                 Infix::Or => self.or(),
@@ -631,6 +634,33 @@ impl<'a> Parser<'a> {
 
         self.parse_precedence(Precedence::Or);
         self.patch_jump(end_jump);
+    }
+
+    fn call(&mut self) {
+        let args_c = self.argument_list();
+        self.emit_byte(OpCode::Call);
+        let line = self.current.line;
+        let chunk = self.current_chunk();
+        chunk.write_u32(args_c, line);
+    }
+
+    fn argument_list(&mut self) -> u32 {
+        let mut args_c = 0;
+        if !self.matches(TokenType::RightParen) {
+            loop {
+                self.expression();
+                if args_c == 255 {
+                    self.error_at_current("Can't have more than 255 arguments.");
+                }
+                args_c += 1;
+                if !self.matches(TokenType::Comma) {
+                    break;
+                }
+            }
+            self.consume(TokenType::RightParen, "Expect ')' after arguments.");
+        }
+
+        args_c
     }
 
     fn binary(&mut self) {

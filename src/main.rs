@@ -8,6 +8,7 @@ use std::env::args;
 mod chunk;
 mod compiler;
 
+#[derive(Debug)]
 struct CallStack {
     function: Function,
     ip: usize,
@@ -190,13 +191,45 @@ impl VM {
                     let value = self.peek(0).clone();
                     self.stack[offset + index as usize] = value;
                 }
+                OpCode::Call => {
+                    let bytes =
+                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
+                    let sized_bytes = bytes.try_into().unwrap();
+                    self.frame_mut().ip += 4;
+                    let args_c = u32::from_be_bytes(sized_bytes);
+                    if !self.call(args_c) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
                 OpCode::Debug => {
                     for v in &self.stack {
                         print!("[{}] ", v.print());
                     }
                     println!();
+
+                    println!("frame {:?}", self.frame());
                 }
             }
+        }
+    }
+
+    fn call(&mut self, argc: u32) -> bool {
+        let f = self.peek(argc as usize);
+        if f.is_function() {
+            let function = f.as_function().clone();
+            if function.arity != argc {
+                self.runtime_error(&format!("Expected {} arguments but got {}.", function.arity, argc));
+                return false;
+            } else {
+                self.frames.push(CallStack {
+                    function,
+                    ip: 0,
+                    offset: self.stack.len() - argc as usize
+                });
+                true
+            }
+        } else {
+            false
         }
     }
 
@@ -213,11 +246,14 @@ impl VM {
 
     fn runtime_error(&mut self, msg: &str) {
         eprintln!("{}", msg);
-        let instruction = self.frame().ip - 1; // todo this size depends on the last instruction size
-        eprintln!(
-            "[line {}] in script",
-            self.frame().function.chunk.lines[instruction]
-        );
+        for frame in self.frames.iter().rev() {
+            let instruction = frame.ip - 1;
+            eprintln!(
+                "[line {}] in {}",
+                frame.function.chunk.lines[instruction],
+                frame.function.name
+            );
+        }
         self.reset_stack();
     }
 

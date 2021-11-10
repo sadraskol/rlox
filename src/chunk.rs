@@ -74,7 +74,7 @@ impl Value {
     }
     pub fn is_function(&self) -> bool {
         if let Value::Obj(o) = self {
-            matches!(&**o, Object::Fun { .. })
+            matches!(&**o, Object::Fun(f))
         } else {
             false
         }
@@ -160,6 +160,7 @@ pub enum OpCode {
     JumpIfFalse,
     Jump,
     Loop,
+    Call,
     Debug,
 }
 
@@ -185,7 +186,8 @@ impl From<u8> for OpCode {
             16 => OpCode::SetLocal,
             17 => OpCode::Jump,
             18 => OpCode::Loop,
-            19 => OpCode::Debug,
+            19 => OpCode::Call,
+            255 => OpCode::Debug,
             _ => panic!("unexpected op code"),
         }
     }
@@ -213,7 +215,8 @@ impl From<OpCode> for u8 {
             OpCode::SetLocal => 16,
             OpCode::Jump => 17,
             OpCode::Loop => 18,
-            OpCode::Debug => 19,
+            OpCode::Call => 19,
+            OpCode::Debug => 255,
         }
     }
 }
@@ -288,6 +291,16 @@ impl Chunk {
                 println!(
                     "OP_CONSTANT      {} '{:?}'",
                     index, self.constants[index as usize]
+                );
+                return offset + 5;
+            }
+            OpCode::Call => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let args_c = u32::from_be_bytes(sized_bytes);
+                println!(
+                    "OP_CALL      {}",
+                    args_c
                 );
                 return offset + 5;
             }
