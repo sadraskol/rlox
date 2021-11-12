@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
@@ -18,20 +19,25 @@ impl Function {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Closure {
+    pub function: Rc<Function>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     Str(String),
-    Fun(Function),
+    Closure(Closure),
 }
 
 impl Object {
     pub fn print(&self) -> String {
         match self {
             Object::Str(s) => s.to_string(),
-            Object::Fun(Function { name, .. }) => {
-                if name == "<script>" {
+            Object::Closure(Closure { function }) => {
+                if function.name == "<script>" {
                     "<script>".to_string()
                 } else {
-                    format!("<fn {}>", name)
+                    format!("<fn {}>", function.name)
                 }
             }
         }
@@ -57,9 +63,9 @@ impl Value {
         let string = Object::Str(s.to_string());
         Value::Obj(Box::new(string))
     }
-    pub fn function(f: Function) -> Self {
-        let function = Object::Fun(f);
-        Value::Obj(Box::new(function))
+    pub fn closure(function: Rc<Function>) -> Self {
+        let closure = Object::Closure(Closure { function });
+        Value::Obj(Box::new(closure))
     }
     pub fn nil() -> Self {
         Value::Nil
@@ -72,9 +78,9 @@ impl Value {
             false
         }
     }
-    pub fn is_function(&self) -> bool {
+    pub fn is_closure(&self) -> bool {
         if let Value::Obj(o) = self {
-            matches!(&**o, Object::Fun(_))
+            matches!(&**o, Object::Closure(_))
         } else {
             false
         }
@@ -114,10 +120,22 @@ impl Value {
         }
     }
 
-    pub fn as_function(&self) -> &Function {
+    pub fn as_function(&self) -> Rc<Function> {
         if let Value::Obj(o) = self {
-            if let Object::Fun(fun) = &**o {
-                fun
+            if let Object::Closure(c) = &**o {
+                c.function.clone()
+            } else {
+                panic!("not a string");
+            }
+        } else {
+            panic!("not an object");
+        }
+    }
+
+    pub fn as_closure(&self) -> Closure {
+        if let Value::Obj(o) = self {
+            if let Object::Closure(c) = &**o {
+                c.clone()
             } else {
                 panic!("not a string");
             }
@@ -158,6 +176,7 @@ pub enum OpCode {
     Jump,
     Loop,
     Call,
+    Closure,
     Debug,
 }
 
@@ -184,6 +203,7 @@ impl From<u8> for OpCode {
             17 => OpCode::Jump,
             18 => OpCode::Loop,
             19 => OpCode::Call,
+            20 => OpCode::Closure,
             255 => OpCode::Debug,
             _ => panic!("unexpected op code"),
         }
@@ -213,6 +233,7 @@ impl From<OpCode> for u8 {
             OpCode::Jump => 17,
             OpCode::Loop => 18,
             OpCode::Call => 19,
+            OpCode::Closure => 20,
             OpCode::Debug => 255,
         }
     }
@@ -287,6 +308,16 @@ impl Chunk {
                 let index = u32::from_be_bytes(sized_bytes);
                 println!(
                     "OP_CONSTANT      {} '{:?}'",
+                    index, self.constants[index as usize]
+                );
+                return offset + 5;
+            }
+            OpCode::Closure => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!(
+                    "OP_CLOSURE       {} '{:?}'",
                     index, self.constants[index as usize]
                 );
                 return offset + 5;

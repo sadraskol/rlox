@@ -1,16 +1,17 @@
-use crate::chunk::Function;
+use crate::chunk::Closure;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
 use crate::compiler::Parser;
 use std::convert::TryInto;
 use std::env::args;
+use std::rc::Rc;
 
 mod chunk;
 mod compiler;
 
 #[derive(Debug)]
 struct CallStack {
-    function: Function,
+    closure: Closure,
     ip: usize,
     offset: usize,
 }
@@ -44,7 +45,7 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         loop {
-            let instruction = self.frame().function.chunk.code[self.frame().ip];
+            let instruction = self.frame().closure.function.chunk.code[self.frame().ip];
             self.frame_mut().ip += 1;
             match instruction.into() {
                 OpCode::Return => {
@@ -58,13 +59,15 @@ impl VM {
                     self.push(v);
                 }
                 OpCode::Constant => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let index = u32::from_be_bytes(sized_bytes);
-                    let constant = (&self.frame().function.chunk.constants[index as usize]).clone();
+                    let index = self.read_u32();
+                    let constant = (&self.frame().closure.function.chunk.constants[index as usize]).clone();
                     self.stack.push(constant);
+                }
+                OpCode::Closure => {
+                    let index = self.read_u32();
+                    let function = (&self.frame().closure.function.chunk.constants[index as usize]).clone();
+                    let closure = Value::closure(function.as_function());
+                    self.stack.push(closure);
                 }
                 OpCode::Divide => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
@@ -154,55 +157,31 @@ impl VM {
                     self.pop();
                 }
                 OpCode::JumpIfFalse => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let jump = u32::from_be_bytes(sized_bytes);
+                    let jump = self.read_u32();
                     if !self.peek(0).as_bool() {
                         self.frame_mut().ip += jump as usize;
                     }
                 }
                 OpCode::Jump => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let jump = u32::from_be_bytes(sized_bytes);
+                    let jump = self.read_u32();
                     self.frame_mut().ip += jump as usize;
                 }
                 OpCode::Loop => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let jump = u32::from_be_bytes(sized_bytes);
+                    let jump = self.read_u32();
                     self.frame_mut().ip -= jump as usize;
                 }
                 OpCode::GetLocal => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let index = u32::from_be_bytes(sized_bytes);
+                    let index = self.read_u32();
                     self.push(self.stack[self.frame().offset + index as usize].clone());
                 }
                 OpCode::SetLocal => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let index = u32::from_be_bytes(sized_bytes);
+                    let index = self.read_u32();
                     let offset = self.frame().offset;
                     let value = self.peek(0).clone();
                     self.stack[offset + index as usize] = value;
                 }
                 OpCode::Call => {
-                    let bytes =
-                        &self.frame().function.chunk.code[self.frame().ip..self.frame().ip + 4];
-                    let sized_bytes = bytes.try_into().unwrap();
-                    self.frame_mut().ip += 4;
-                    let args_c = u32::from_be_bytes(sized_bytes);
+                    let args_c = self.read_u32();
                     if !self.call(args_c) {
                         return InterpretResult::RuntimeError;
                     }
@@ -219,10 +198,17 @@ impl VM {
         }
     }
 
+    fn read_u32(&mut self) -> u32 {
+        let bytes = &self.frame().closure.function.chunk.code[self.frame().ip..self.frame().ip + 4];
+        let sized_bytes = bytes.try_into().unwrap();
+        self.frame_mut().ip += 4;
+        u32::from_be_bytes(sized_bytes)
+    }
+
     fn call(&mut self, argc: u32) -> bool {
         let f = self.peek(argc as usize);
-        if f.is_function() {
-            let function = f.as_function().clone();
+        if f.is_closure() {
+            let function = f.as_function();
             if function.arity != argc {
                 self.runtime_error(&format!(
                     "Expected {} arguments but got {}.",
@@ -230,8 +216,9 @@ impl VM {
                 ));
                 false
             } else {
+                let closure = f.as_closure();
                 self.frames.push(CallStack {
-                    function,
+                    closure,
                     ip: 0,
                     offset: self.stack.len() - argc as usize,
                 });
@@ -259,7 +246,7 @@ impl VM {
             let instruction = frame.ip - 1;
             eprintln!(
                 "[line {}] in {}",
-                frame.function.chunk.lines[instruction], frame.function.name
+                frame.closure.function.chunk.lines[instruction], frame.closure.function.name
             );
         }
         self.reset_stack();
@@ -290,7 +277,7 @@ fn run_file(f_name: String) {
     if let Some(script) = script {
         let mut vm = VM {
             frames: vec![CallStack {
-                function: script,
+                closure: Closure { function: Rc::new(script) },
                 offset: 0,
                 ip: 0,
             }],
