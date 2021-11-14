@@ -103,7 +103,11 @@ impl VM {
                         let a = self.pop();
                         self.push(Value::from_number(a.as_number() + b.as_number()));
                     } else {
-                        self.runtime_error(&format!("Operands must be two numbers or two strings. Received: {} and {}.", self.peek(0).print(), self.peek(1).print()));
+                        self.runtime_error(&format!(
+                            "Operands must be two numbers or two strings. Received: {} and {}.",
+                            self.peek(0).print(),
+                            self.peek(1).print()
+                        ));
                         return InterpretResult::RuntimeError;
                     }
                 }
@@ -283,7 +287,7 @@ impl VM {
 
     fn concatenate(&mut self) {
         let b = self.pop();
-        let mut a = self.pop().as_str().to_string();
+        let mut a = self.pop().as_str();
         a.push_str(&b.as_str());
         self.push(Value::string(&a));
     }
