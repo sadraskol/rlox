@@ -1,6 +1,6 @@
+use std::cell::RefCell;
 use std::convert::TryInto;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
@@ -75,8 +75,8 @@ impl Value {
         let string = Object::Str(s.to_string());
         Value::Obj(Box::new(string))
     }
-    pub fn closure(function: Rc<Function>) -> Self {
-        let closure = Object::Closure(Closure { function, upvalues: vec![] });
+    pub fn closure(function: Rc<Function>, upvalues: Vec<UpValue>) -> Self {
+        let closure = Object::Closure(Closure { function, upvalues });
         Value::Obj(Box::new(closure))
     }
     pub fn nil() -> Self {
@@ -132,6 +132,7 @@ impl Value {
         }
     }
 
+    // TODO return &Function instead of Rc<Function>
     pub fn as_function(&self) -> Rc<Function> {
         if let Value::Obj(o) = self {
             if let Object::Closure(c) = &**o {
@@ -343,10 +344,7 @@ impl Chunk {
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 let c = &self.constants[index as usize];
-                println!(
-                    "OP_CLOSURE       {} {}",
-                    index, c.print()
-                );
+                println!("OP_CLOSURE       {} {}", index, c.print());
                 for _ in 0..c.as_function().upvalue_count {
                     let is_local = if self.code[offset] != 0 {
                         "local"
@@ -358,7 +356,12 @@ impl Chunk {
                     offset += 4;
                     let sized_bytes = bytes.try_into().unwrap();
                     let index = u32::from_be_bytes(sized_bytes);
-                    println!("{:04}      |                  {} {}", offset - 5, is_local, index)
+                    println!(
+                        "{:04}      |                  {} {}",
+                        offset - 5,
+                        is_local,
+                        index
+                    )
                 }
                 return offset;
             }

@@ -1,12 +1,12 @@
 use crate::chunk::Closure;
 use crate::chunk::OpCode;
-use crate::chunk::Value;
 use crate::chunk::UpValue;
+use crate::chunk::Value;
 use crate::compiler::Parser;
+use std::cell::RefCell;
 use std::convert::TryInto;
 use std::env::args;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 mod chunk;
 mod compiler;
@@ -62,23 +62,27 @@ impl VM {
                 }
                 OpCode::Constant => {
                     let index = self.read_u32();
-                    let constant = (&self.frame().closure.function.chunk.constants[index as usize]).clone();
+                    let constant =
+                        (&self.frame().closure.function.chunk.constants[index as usize]).clone();
                     self.stack.push(constant);
                 }
                 OpCode::Closure => {
                     let index = self.read_u32();
-                    let function = (&self.frame().closure.function.chunk.constants[index as usize]).clone();
-                    let closure_value = Value::closure(function.as_function());
-                    let mut closure = closure_value.as_closure();
-                    for _ in 0..closure.function.upvalue_count {
+                    let function = (&self.frame().closure.function.chunk.constants[index as usize])
+                        .clone()
+                        .as_function();
+                    let mut upvalues = vec![];
+                    for _ in 0..function.upvalue_count {
                         let is_local = self.read_bool();
                         let index = self.read_u32();
                         if is_local {
-                            closure.upvalues.push(self.capture_upvalue(self.frame().offset + index as usize));
+                            upvalues
+                                .push(self.capture_upvalue(self.frame().offset + index as usize));
                         } else {
-                            closure.upvalues.push(self.frame().closure.upvalues[index as usize].clone());
+                            upvalues.push(self.frame().closure.upvalues[index as usize].clone());
                         }
                     }
+                    let closure_value = Value::closure(function, upvalues);
                     self.stack.push(closure_value);
                 }
                 OpCode::Divide => {
@@ -194,11 +198,17 @@ impl VM {
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.read_u32();
-                    self.push(Value::Lifted(self.frame().closure.upvalues[slot as usize].location.clone()));
+                    self.push(Value::Lifted(
+                        self.frame().closure.upvalues[slot as usize]
+                            .location
+                            .clone(),
+                    ));
                 }
                 OpCode::SetUpvalue => {
                     let slot = self.read_u32();
-                    *self.frame().closure.upvalues[slot as usize].location.borrow_mut() = self.peek(0).clone();
+                    *self.frame().closure.upvalues[slot as usize]
+                        .location
+                        .borrow_mut() = self.peek(0).clone();
                 }
                 OpCode::Call => {
                     let args_c = self.read_u32();
@@ -221,14 +231,12 @@ impl VM {
     fn capture_upvalue(&mut self, i: usize) -> UpValue {
         if let Value::Lifted(lifted) = &self.stack[i] {
             UpValue {
-                location: lifted.clone()
+                location: lifted.clone(),
             }
         } else {
             let lifted = Rc::new(RefCell::new(self.stack[i].clone()));
             self.stack[i] = Value::Lifted(lifted.clone());
-            UpValue {
-                location: lifted
-            }
+            UpValue { location: lifted }
         }
     }
 
@@ -317,7 +325,10 @@ fn run_file(f_name: String) {
     if let Some(script) = script {
         let mut vm = VM {
             frames: vec![CallStack {
-                closure: Closure { function: Rc::new(script), upvalues: vec![] },
+                closure: Closure {
+                    function: Rc::new(script),
+                    upvalues: vec![],
+                },
                 offset: 0,
                 ip: 0,
             }],

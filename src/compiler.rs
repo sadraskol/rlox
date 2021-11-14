@@ -2,8 +2,8 @@ use crate::chunk::Chunk;
 use crate::chunk::Function;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
-use std::str::FromStr;
 use std::rc::Rc;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug)]
 struct Local<'a> {
@@ -30,7 +30,7 @@ struct Compiler<'a> {
     scope_depth: usize,
     function: Function,
     kind: FunctionType,
-    upvalues: Vec<Upvalue>
+    upvalues: Vec<Upvalue>,
 }
 
 impl<'a> Compiler<'a> {
@@ -97,13 +97,14 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_upvalue(&mut self, local: u32, is_local: bool) -> u32 {
-        if let Some(i) = self.upvalues.iter().position(|u| u == &Upvalue {local, is_local}) {
+        if let Some(i) = self
+            .upvalues
+            .iter()
+            .position(|u| u == &Upvalue { local, is_local })
+        {
             i as u32
         } else {
-            self.upvalues.push(Upvalue {
-                local,
-                is_local,
-            });
+            self.upvalues.push(Upvalue { local, is_local });
             self.function.upvalue_count += 1;
             (self.upvalues.len() - 1) as u32
         }
@@ -345,7 +346,8 @@ impl<'a> Parser<'a> {
         let (f, upvalues) = self.end_compiler();
         let line = self.previous.line;
         let chunk = self.current_chunk();
-        let i = chunk.add_constant(Value::closure(Rc::new(f)));
+        // TODO here we only need Value::Function
+        let i = chunk.add_constant(Value::closure(Rc::new(f), vec![]));
         chunk.write_chunk(OpCode::Closure, line);
         chunk.write_u32(i, line);
         for up in upvalues {
