@@ -11,17 +11,19 @@ struct Local<'a> {
     depth: Option<usize>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum FunctionType {
     Function,
     Script,
 }
 
+#[derive(Clone, PartialEq, Debug)]
 struct Upvalue {
     local: u32,
     is_local: bool,
 }
 
+#[derive(Debug)]
 struct Compiler<'a> {
     enclosing: Option<Box<Compiler<'a>>>,
     locals: Vec<Local<'a>>,
@@ -68,12 +70,43 @@ impl<'a> Compiler<'a> {
         self.locals.push(Local { token, depth: None })
     }
 
+    fn resolve_local(&self, name: &str) -> Option<u32> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if name == local.token.lexeme {
+                if local.depth.is_none() {
+                    continue;
+                }
+                return Some(i as u32);
+            }
+        }
+        None
+    }
+
+    fn resolve_upvalue(&mut self, name: &str) -> Option<u32> {
+        if let Some(enclosing) = &mut self.enclosing {
+            if let Some(local) = enclosing.resolve_local(name) {
+                Some(self.add_upvalue(local, true))
+            } else if let Some(upvalue) = enclosing.resolve_upvalue(name) {
+                Some(self.add_upvalue(upvalue, false))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn add_upvalue(&mut self, local: u32, is_local: bool) -> u32 {
-        self.upvalues.push(Upvalue {
-            local,
-            is_local,
-        });
-        (self.upvalues.len() - 1) as u32
+        if let Some(i) = self.upvalues.iter().position(|u| u == &Upvalue {local, is_local}) {
+            i as u32
+        } else {
+            self.upvalues.push(Upvalue {
+                local,
+                is_local,
+            });
+            self.function.upvalue_count += 1;
+            (self.upvalues.len() - 1) as u32
+        }
     }
 
     fn locals_removed_from_stack(&mut self) -> usize {
@@ -219,19 +252,20 @@ impl<'a> Parser<'a> {
         if self.had_error {
             None
         } else {
-            Some(function)
+            Some(function.0)
         }
     }
 
-    fn end_compiler(&mut self) -> Function {
+    fn end_compiler(&mut self) -> (Function, Vec<Upvalue>) {
         self.emit_return();
         let function = self.compiler.function.clone();
-        function.chunk.disassemble(&function.name);
+        let upvalues = self.compiler.upvalues.clone();
 
         if let Some(enclosing) = self.compiler.enclosing.take() {
             self.compiler = *enclosing;
         }
-        function
+        function.chunk.disassemble(&function.name);
+        (function, upvalues)
     }
 
     fn emit_return(&mut self) {
@@ -308,12 +342,16 @@ impl<'a> Parser<'a> {
 
         self.block();
 
-        let f = self.end_compiler();
+        let (f, upvalues) = self.end_compiler();
         let line = self.previous.line;
         let chunk = self.current_chunk();
         let i = chunk.add_constant(Value::closure(Rc::new(f)));
         chunk.write_chunk(OpCode::Closure, line);
         chunk.write_u32(i, line);
+        for up in upvalues {
+            self.compiler.function.chunk.write_bool(up.is_local, line);
+            self.compiler.function.chunk.write_u32(up.local, line);
+        }
     }
 
     fn synchronize(&mut self) {
@@ -595,7 +633,7 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        if let Some(i) = self.resolve_local(&self.compiler, self.previous.lexeme) {
+        if let Some(local) = self.compiler.resolve_local(self.previous.lexeme) {
             let line = self.previous.line;
             if can_assign && self.matches(TokenType::Equal) {
                 self.expression();
@@ -604,36 +642,19 @@ impl<'a> Parser<'a> {
                 self.emit_byte(OpCode::GetLocal);
             }
             let chunk = self.current_chunk();
-            chunk.write_u32(i, line);
-        } else if let Some((compiler, local, is_local)) = self.resolve_upvalue(&self.compiler, self.previous.lexeme) {
-            compiler.add_upvalue(local, is_local);
-
+            chunk.write_u32(local, line);
+        } else if let Some(upvalue) = self.compiler.resolve_upvalue(self.previous.lexeme) {
+            let line = self.previous.line;
+            if can_assign && self.matches(TokenType::Equal) {
+                self.expression();
+                self.emit_byte(OpCode::SetUpvalue);
+            } else {
+                self.emit_byte(OpCode::GetUpvalue);
+            }
+            let chunk = self.current_chunk();
+            chunk.write_u32(upvalue, line);
         } else {
             self.error_at_current(&*format!("Unknown variable '{}'.", self.previous.lexeme));
-        }
-    }
-
-    fn resolve_local(&self, compiler: &Compiler<'a>, name: &str) -> Option<u32> {
-        for (i, local) in compiler.locals.iter().enumerate().rev() {
-            if name == local.token.lexeme {
-                if local.depth.is_none() {
-                    continue;
-                }
-                return Some(i as u32);
-            }
-        }
-        None
-    }
-
-    fn resolve_upvalue<'b>(&self, compiler: &'b Compiler<'a>, name: &str) -> Option<(&'b Compiler<'a>, u32, bool)> {
-        if let Some(enclosing) = &compiler.enclosing {
-            if let Some(local) = self.resolve_local(&enclosing, name) {
-                Some((compiler, local, true))
-            } else {
-                None
-            }
-        } else {
-            None
         }
     }
 

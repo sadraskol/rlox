@@ -1,12 +1,10 @@
-fun a() {
-    fun b() {
-        fun c() {
-            1 + "hello";
-        }
-        c();
-    }
-    b();
+{
+fun outer() {
+  var x = "outside";
+  fun inner() {
+    print x;
+  }
+  inner();
 }
-
-
-a();
+outer();
+}

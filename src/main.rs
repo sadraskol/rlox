@@ -1,10 +1,12 @@
 use crate::chunk::Closure;
 use crate::chunk::OpCode;
 use crate::chunk::Value;
+use crate::chunk::UpValue;
 use crate::compiler::Parser;
 use std::convert::TryInto;
 use std::env::args;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 mod chunk;
 mod compiler;
@@ -66,8 +68,18 @@ impl VM {
                 OpCode::Closure => {
                     let index = self.read_u32();
                     let function = (&self.frame().closure.function.chunk.constants[index as usize]).clone();
-                    let closure = Value::closure(function.as_function());
-                    self.stack.push(closure);
+                    let closure_value = Value::closure(function.as_function());
+                    let mut closure = closure_value.as_closure();
+                    for _ in 0..closure.function.upvalue_count {
+                        let is_local = self.read_bool();
+                        let index = self.read_u32();
+                        if is_local {
+                            closure.upvalues.push(self.capture_upvalue(self.frame().offset + index as usize));
+                        } else {
+                            closure.upvalues.push(self.frame().closure.upvalues[index as usize].clone());
+                        }
+                    }
+                    self.stack.push(closure_value);
                 }
                 OpCode::Divide => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
@@ -180,6 +192,14 @@ impl VM {
                     let value = self.peek(0).clone();
                     self.stack[offset + index as usize] = value;
                 }
+                OpCode::GetUpvalue => {
+                    let slot = self.read_u32();
+                    self.push(Value::Lifted(self.frame().closure.upvalues[slot as usize].location.clone()));
+                }
+                OpCode::SetUpvalue => {
+                    let slot = self.read_u32();
+                    *self.frame().closure.upvalues[slot as usize].location.borrow_mut() = self.peek(0).clone();
+                }
                 OpCode::Call => {
                     let args_c = self.read_u32();
                     if !self.call(args_c) {
@@ -198,11 +218,31 @@ impl VM {
         }
     }
 
+    fn capture_upvalue(&mut self, i: usize) -> UpValue {
+        if let Value::Lifted(lifted) = &self.stack[i] {
+            UpValue {
+                location: lifted.clone()
+            }
+        } else {
+            let lifted = Rc::new(RefCell::new(self.stack[i].clone()));
+            self.stack[i] = Value::Lifted(lifted.clone());
+            UpValue {
+                location: lifted
+            }
+        }
+    }
+
     fn read_u32(&mut self) -> u32 {
         let bytes = &self.frame().closure.function.chunk.code[self.frame().ip..self.frame().ip + 4];
         let sized_bytes = bytes.try_into().unwrap();
         self.frame_mut().ip += 4;
         u32::from_be_bytes(sized_bytes)
+    }
+
+    fn read_bool(&mut self) -> bool {
+        let code = self.frame().closure.function.chunk.code[self.frame().ip];
+        self.frame_mut().ip += 1;
+        code != 0
     }
 
     fn call(&mut self, argc: u32) -> bool {
@@ -277,7 +317,7 @@ fn run_file(f_name: String) {
     if let Some(script) = script {
         let mut vm = VM {
             frames: vec![CallStack {
-                closure: Closure { function: Rc::new(script) },
+                closure: Closure { function: Rc::new(script), upvalues: vec![] },
                 offset: 0,
                 ip: 0,
             }],

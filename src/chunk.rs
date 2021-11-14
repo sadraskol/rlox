@@ -1,11 +1,13 @@
 use std::convert::TryInto;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub arity: u32,
     pub chunk: Chunk,
     pub name: String,
+    pub upvalue_count: u32,
 }
 
 impl Function {
@@ -14,6 +16,7 @@ impl Function {
             arity,
             name: name.to_string(),
             chunk: Chunk::new(),
+            upvalue_count: 0,
         }
     }
 }
@@ -21,6 +24,14 @@ impl Function {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Closure {
     pub function: Rc<Function>,
+    pub upvalues: Vec<UpValue>,
+}
+
+type Lifted<T> = Rc<RefCell<T>>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpValue {
+    pub location: Lifted<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -33,7 +44,7 @@ impl Object {
     pub fn print(&self) -> String {
         match self {
             Object::Str(s) => s.to_string(),
-            Object::Closure(Closure { function }) => {
+            Object::Closure(Closure { function, .. }) => {
                 if function.name == "<script>" {
                     "<script>".to_string()
                 } else {
@@ -50,6 +61,7 @@ pub enum Value {
     Bool(bool),
     Number(f64),
     Obj(Box<Object>),
+    Lifted(Lifted<Value>),
 }
 
 impl Value {
@@ -64,7 +76,7 @@ impl Value {
         Value::Obj(Box::new(string))
     }
     pub fn closure(function: Rc<Function>) -> Self {
-        let closure = Object::Closure(Closure { function });
+        let closure = Object::Closure(Closure { function, upvalues: vec![] });
         Value::Obj(Box::new(closure))
     }
     pub fn nil() -> Self {
@@ -151,6 +163,7 @@ impl Value {
             Value::Bool(false) => "false".to_string(),
             Value::Number(f) => f.to_string(),
             Value::Obj(o) => o.print(),
+            Value::Lifted(l) => l.borrow().print(),
         }
     }
 }
@@ -172,6 +185,8 @@ pub enum OpCode {
     Pop,
     GetLocal,
     SetLocal,
+    GetUpvalue,
+    SetUpvalue,
     JumpIfFalse,
     Jump,
     Loop,
@@ -204,6 +219,8 @@ impl From<u8> for OpCode {
             18 => OpCode::Loop,
             19 => OpCode::Call,
             20 => OpCode::Closure,
+            21 => OpCode::GetUpvalue,
+            22 => OpCode::SetUpvalue,
             255 => OpCode::Debug,
             _ => panic!("unexpected op code"),
         }
@@ -234,6 +251,8 @@ impl From<OpCode> for u8 {
             OpCode::Loop => 18,
             OpCode::Call => 19,
             OpCode::Closure => 20,
+            OpCode::GetUpvalue => 21,
+            OpCode::SetUpvalue => 22,
             OpCode::Debug => 255,
         }
     }
@@ -260,6 +279,11 @@ impl Chunk {
             panic!("Source code too long!");
         }
         self.code.push(code.into());
+        self.lines.push(line);
+    }
+
+    pub fn write_bool(&mut self, b: bool, line: usize) {
+        self.code.push(if b { 1 } else { 0 });
         self.lines.push(line);
     }
 
@@ -293,7 +317,7 @@ impl Chunk {
         self.code.len() as u32
     }
 
-    fn disassemble_instruction(&self, offset: usize) -> usize {
+    fn disassemble_instruction(&self, mut offset: usize) -> usize {
         print!("{:04} ", offset);
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
             print!("   | ");
@@ -313,20 +337,36 @@ impl Chunk {
                 return offset + 5;
             }
             OpCode::Closure => {
-                let bytes = &self.code[offset + 1..offset + 5];
+                offset += 1;
+                let bytes = &self.code[offset..offset + 4];
+                offset += 4;
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
+                let c = &self.constants[index as usize];
                 println!(
-                    "OP_CLOSURE       {} '{:?}'",
-                    index, self.constants[index as usize]
+                    "OP_CLOSURE       {} {}",
+                    index, c.print()
                 );
-                return offset + 5;
+                for _ in 0..c.as_function().upvalue_count {
+                    let is_local = if self.code[offset] != 0 {
+                        "local"
+                    } else {
+                        "upvalue"
+                    };
+                    offset += 1;
+                    let bytes = &self.code[offset..offset + 4];
+                    offset += 4;
+                    let sized_bytes = bytes.try_into().unwrap();
+                    let index = u32::from_be_bytes(sized_bytes);
+                    println!("{:04}      |                  {} {}", offset - 5, is_local, index)
+                }
+                return offset;
             }
             OpCode::Call => {
                 let bytes = &self.code[offset + 1..offset + 5];
                 let sized_bytes = bytes.try_into().unwrap();
                 let args_c = u32::from_be_bytes(sized_bytes);
-                println!("OP_CALL      {}", args_c);
+                println!("OP_CALL          {}", args_c);
                 return offset + 5;
             }
             OpCode::Divide => println!("OP_DIVIDE"),
@@ -375,6 +415,20 @@ impl Chunk {
                 let sized_bytes = bytes.try_into().unwrap();
                 let index = u32::from_be_bytes(sized_bytes);
                 println!("OP_SET_LOCAL     {}", index);
+                return offset + 5;
+            }
+            OpCode::GetUpvalue => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!("OP_GET_UPVALUE   {}", index);
+                return offset + 5;
+            }
+            OpCode::SetUpvalue => {
+                let bytes = &self.code[offset + 1..offset + 5];
+                let sized_bytes = bytes.try_into().unwrap();
+                let index = u32::from_be_bytes(sized_bytes);
+                println!("OP_SET_UPVALUE   {}", index);
                 return offset + 5;
             }
         }
