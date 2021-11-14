@@ -86,6 +86,8 @@ impl Value {
     pub fn is_string(&self) -> bool {
         if let Value::Obj(o) = self {
             matches!(&**o, Object::Str { .. })
+        } else if let Value::Lifted(l) = self {
+            l.borrow().is_string()
         } else {
             false
         }
@@ -93,20 +95,32 @@ impl Value {
     pub fn is_closure(&self) -> bool {
         if let Value::Obj(o) = self {
             matches!(&**o, Object::Closure(_))
+        } else if let Value::Lifted(l) = self {
+            l.borrow().is_closure()
         } else {
             false
         }
     }
     pub fn is_bool(&self) -> bool {
-        matches!(self, Value::Bool(_))
+        if let Value::Lifted(l) = self {
+            l.borrow().is_bool()
+        } else {
+            matches!(self, Value::Bool(_))
+        }
     }
     pub fn is_number(&self) -> bool {
-        matches!(self, Value::Number(_))
+        if let Value::Lifted(l) = self {
+            l.borrow().is_number()
+        } else {
+            matches!(self, Value::Number(_))
+        }
     }
 
     pub fn as_number(&self) -> f64 {
         if let Value::Number(n) = self {
             *n
+        } else if let Value::Lifted(l) = self {
+            l.borrow().as_number()
         } else {
             panic!("not a number");
         }
@@ -115,18 +129,22 @@ impl Value {
     pub fn as_bool(&self) -> bool {
         if let Value::Bool(b) = self {
             *b
+        } else if let Value::Lifted(l) = self {
+            l.borrow().as_bool()
         } else {
             panic!("not a bool");
         }
     }
 
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> String {
         if let Value::Obj(o) = self {
             if let Object::Str(s) = &**o {
-                s
+                s.to_string()
             } else {
                 panic!("not a string");
             }
+        } else if let Value::Lifted(l) = self {
+            l.borrow().as_str()
         } else {
             panic!("not an object");
         }
@@ -140,6 +158,8 @@ impl Value {
             } else {
                 panic!("not a string");
             }
+        } else if let Value::Lifted(l) = self {
+            l.borrow().as_function()
         } else {
             panic!("not an object");
         }
@@ -152,6 +172,8 @@ impl Value {
             } else {
                 panic!("not a string");
             }
+        } else if let Value::Lifted(l) = self {
+            l.borrow().as_closure()
         } else {
             panic!("not an object");
         }
@@ -169,6 +191,7 @@ impl Value {
     }
 }
 
+#[derive(Debug)]
 pub enum OpCode {
     Return,
     Constant,

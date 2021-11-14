@@ -54,17 +54,18 @@ impl VM {
                     let v = self.pop();
                     let frame = self.frames.pop().unwrap();
                     // here lies our garbage collector!
-                    self.stack.truncate(frame.offset);
                     if self.frames.is_empty() {
+                        self.stack.truncate(0);
                         return InterpretResult::Ok;
                     }
+                    self.stack.truncate(frame.offset - 1);
                     self.push(v);
                 }
                 OpCode::Constant => {
                     let index = self.read_u32();
                     let constant =
                         (&self.frame().closure.function.chunk.constants[index as usize]).clone();
-                    self.stack.push(constant);
+                    self.push(constant);
                 }
                 OpCode::Closure => {
                     let index = self.read_u32();
@@ -83,7 +84,7 @@ impl VM {
                         }
                     }
                     let closure_value = Value::closure(function, upvalues);
-                    self.stack.push(closure_value);
+                    self.push(closure_value);
                 }
                 OpCode::Divide => {
                     if !self.peek(0).is_number() || !self.peek(0).is_number() {
@@ -97,12 +98,12 @@ impl VM {
                 OpCode::Add => {
                     if self.peek(0).is_string() && self.peek(1).is_string() {
                         self.concatenate();
-                    } else if self.peek(0).is_number() && self.peek(0).is_number() {
+                    } else if self.peek(0).is_number() && self.peek(1).is_number() {
                         let b = self.pop();
                         let a = self.pop();
                         self.push(Value::from_number(a.as_number() + b.as_number()));
                     } else {
-                        self.runtime_error("Operands must be two numbers or two strings.");
+                        self.runtime_error(&format!("Operands must be two numbers or two strings. Received: {} and {}.", self.peek(0).print(), self.peek(1).print()));
                         return InterpretResult::RuntimeError;
                     }
                 }
@@ -217,15 +218,18 @@ impl VM {
                     }
                 }
                 OpCode::Debug => {
-                    for v in &self.stack {
-                        print!("[{}] ", v.print());
-                    }
-                    println!();
-
-                    println!("frame {:?}", self.frame());
+                    self.debug();
                 }
             }
         }
+    }
+
+    fn debug(&self) {
+        print!("stack: ");
+        for v in &self.stack {
+            print!("[{}] ", v.print());
+        }
+        println!();
     }
 
     fn capture_upvalue(&mut self, i: usize) -> UpValue {
@@ -280,7 +284,7 @@ impl VM {
     fn concatenate(&mut self) {
         let b = self.pop();
         let mut a = self.pop().as_str().to_string();
-        a.push_str(b.as_str());
+        a.push_str(&b.as_str());
         self.push(Value::string(&a));
     }
 

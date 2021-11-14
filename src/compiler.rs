@@ -319,6 +319,7 @@ impl<'a> Parser<'a> {
         let mut compiler = Compiler::new();
         if kind != FunctionType::Script {
             compiler.function.name = self.previous.lexeme.to_string();
+            compiler.kind = FunctionType::Function;
         }
         let enclosing = std::mem::replace(&mut self.compiler, compiler);
         self.compiler.enclose(enclosing);
